@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#08090d"><title>Admin · Regnum Noctis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="admin-page">
+  <div class="stars" aria-hidden="true"></div>
+  <header class="admin-header shell"><a class="back-link" href="index.html">← Rangliste</a><div><p class="eyebrow">Spielleitung</p><h1>Adminbereich</h1></div><button id="logoutBtn" class="text-button hidden">Abmelden</button></header>
+  <main class="shell admin-shell">
+    <section id="loginPanel" class="panel login-panel">
+      <p class="eyebrow">Zutritt nur für Spielleitung</p><h2>Einloggen</h2>
+      <form id="loginForm"><label>E-Mail<input id="email" type="email" autocomplete="username" required></label><label>Passwort<input id="password" type="password" autocomplete="current-password" required></label><button class="primary-button" type="submit">Tor öffnen</button><p id="loginError" class="form-error"></p></form>
+      <div id="demoLogin" class="demo-note hidden"><strong>Demomodus aktiv.</strong> Firebase ist noch nicht konfiguriert. Du kannst die Funktionen lokal ohne Login testen.<button id="enterDemo" class="secondary-button">Demo öffnen</button></div>
+    </section>
+
+    <div id="adminContent" class="hidden">
+      <section class="panel status-panel"><div><p class="eyebrow">Sichtbarkeit</p><h2>Modus steuern</h2></div><div class="segmented" role="group" aria-label="Anzeigemodus"><button data-mode="live">Live</button><button data-mode="frozen">Einfrieren</button><button data-mode="final">Finale</button></div><p class="mode-help" id="modeHelp"></p></section>
+
+      <section class="panel">
+        <div class="panel-title"><div><p class="eyebrow">Neuer Eintrag</p><h2 id="formTitle">Spielresultat erfassen</h2></div><button id="cancelEdit" class="text-button hidden">Abbrechen</button></div>
+        <form id="resultForm">
+          <div class="form-grid"><label>Spiel<input id="gameName" type="text" placeholder="z. B. Nachtduell" required maxlength="60"></label><label>Runde / Zusatz<input id="roundName" type="text" placeholder="z. B. Runde 1" maxlength="60"></label></div>
+          <label>Kurzes Resultat (optional)<input id="resultText" type="text" placeholder="z. B. Draco gewinnt das Stechen" maxlength="120"></label>
+          <div id="scoreInputs" class="score-inputs"></div>
+          <button class="primary-button" type="submit">Resultat speichern</button><p id="saveMessage" class="save-message"></p>
+        </form>
+      </section>
+
+      <section class="panel"><div class="panel-title"><div><p class="eyebrow">Gespeichert</p><h2>Resultate verwalten</h2></div></div><div id="adminResults" class="admin-results"></div><p id="adminEmpty" class="empty-state">Noch keine Resultate vorhanden.</p></section>
+    </div>
+  </main>
+  <div id="toast" class="toast" role="status"></div>
+  <script type="module" src="admin.js"></script>
+</body>
+</html>
