@@ -1,9 +1,9 @@
 export const TEAMS = [
-  { id: "draco", name: "Draco", title: "Reich des Drachen", icon: "🐉", color: "#d84747", glow: "#ff6b57" },
-  { id: "serpens", name: "Serpens", title: "Reich der Schlange", icon: "🐍", color: "#2f9e68", glow: "#61d095" },
-  { id: "lupus", name: "Lupus", title: "Reich des Wolfes", icon: "🐺", color: "#6078a9", glow: "#94aee5" },
-  { id: "corvus", name: "Corvus", title: "Reich des Raben", icon: "◆", color: "#7255a5", glow: "#ae83e8" },
-  { id: "noctua", name: "Noctua", title: "Reich der Eule", icon: "🦉", color: "#c18a32", glow: "#f3bd57" }
+  { id: "draco", name: "Draco", title: "Reich des Drachen", logo: "assets/teams/draco.webp", color: "#d84747", glow: "#ff6b57" },
+  { id: "serpens", name: "Serpens", title: "Reich der Schlange", logo: "assets/teams/serpens.webp", color: "#2f9e68", glow: "#61d095" },
+  { id: "lupus", name: "Lupus", title: "Reich des Wolfes", logo: "assets/teams/lupus.webp", color: "#2f7fd4", glow: "#63aaff" },
+  { id: "corvus", name: "Corvus", title: "Reich des Raben", logo: "assets/teams/corvus.webp", color: "#585860", glow: "#a5a5ae" },
+  { id: "noctua", name: "Noctua", title: "Reich der Eule", logo: "assets/teams/noctua.webp", color: "#c18a32", glow: "#f3bd57" }
 ];
 
 export const EMPTY_STATE = { settings: { mode: "live", updatedAt: 0 }, games: {} };

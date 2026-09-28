@@ -27,7 +27,7 @@ function render(state) {
   $("#leaderboard").innerHTML = ranking.map((team, index) => `
     <li class="rank-card ${index === 0 && hasResults ? "leader" : ""}" style="--team:${team.color};--glow:${team.glow}">
       <div class="position">${index + 1}</div>
-      <div class="crest"><span>${team.icon}</span></div>
+      <div class="crest"><img src="${team.logo}" alt="Wappen ${team.name}"></div>
       <div class="team-copy"><strong>${team.name}</strong><small>${team.title}</small></div>
       ${index === 0 && hasResults ? '<div class="crown" title="Führendes Reich">♛</div>' : ""}
       <div class="score"><strong>${totals[team.id]}</strong><small>Punkte</small></div>
@@ -53,7 +53,7 @@ function render(state) {
 function pointChips(points = {}) { return TEAMS.filter(team => Number(points[team.id]) !== 0).map(team => `<span style="--team:${team.color}"><i></i>${team.name} <b>${Number(points[team.id]) > 0 ? "+" : ""}${Number(points[team.id])}</b></span>`).join("") || '<span class="muted">Keine Punkte</span>'; }
 
 function renderWinner(team, points) {
-  $("#winnerView").innerHTML = `<div class="winner-crown">♛</div><p class="eyebrow">Herrscher des Regnum Noctis 2026</p><div class="winner-crest" style="--team:${team.color};--glow:${team.glow}">${team.icon}</div><h2>${team.name}</h2><p>${team.title}</p><strong>${points} Punkte</strong>`;
+  $("#winnerView").innerHTML = `<div class="winner-crown">♛</div><p class="eyebrow">Herrscher des Regnum Noctis 2026</p><div class="winner-crest" style="--team:${team.color};--glow:${team.glow}"><img src="${team.logo}" alt="Wappen ${team.name}"></div><h2>${team.name}</h2><p>${team.title}</p><strong>${points} Punkte</strong>`;
   if (!$("#winnerView").dataset.celebrated) { $("#winnerView").dataset.celebrated = "1"; setTimeout(() => burstConfetti(team.color, 180), 250); }
 }
 
