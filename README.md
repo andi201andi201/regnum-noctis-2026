@@ -1,0 +1,1 @@
+Initialisiere Regnum Noctis 2026.
