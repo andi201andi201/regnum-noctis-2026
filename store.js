@@ -1,5 +1,5 @@
 import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
-import { EMPTY_STATE } from "./data.js";
+import { EMPTY_STATE, TEAMS } from "./data.js";
 
 const STORAGE_KEY = "regnum-noctis-demo";
 let firebase = null;
@@ -24,7 +24,14 @@ function firebaseStore() {
   return {
     demo: false,
     subscribe(callback) {
-      return firebase.onValue(firebase.ref(firebase.db), snapshot => callback(normalise(snapshot.val())));
+      let state = normalise();
+      const emit = () => callback(normalise(state));
+      const stops = [
+        firebase.onValue(firebase.ref(firebase.db, "settings"), snapshot => { state.settings = snapshot.val() || {}; emit(); }),
+        firebase.onValue(firebase.ref(firebase.db, "games"), snapshot => { state.games = snapshot.val() || {}; emit(); }),
+        firebase.onValue(firebase.ref(firebase.db, "oracleAnswers"), snapshot => { state.oracleAnswers = snapshot.val() || {}; emit(); })
+      ];
+      return () => stops.forEach(stop => stop());
     },
     auth: {
       login: (email, password) => firebase.signInWithEmailAndPassword(firebase.auth, email, password),
@@ -66,7 +73,42 @@ function firebaseStore() {
         return huntGame(roundId, target, profile, points, firebase.auth.currentUser.uid);
       });
       return { awarded: created && result.committed, teamId: result.snapshot.val()?.teamId || profile.teamId };
-    }
+    },
+    startOracle({ question, answer, unit, minutes }) {
+      const startedAt = Date.now();
+      const roundId = startedAt.toString(36);
+      const updates = {};
+      updates["settings/oracle"] = { active: true, revealed: false, roundId, question, unit, startedAt, endsAt: startedAt + minutes * 60000, results: {} };
+      updates[`oracleSecrets/${roundId}`] = { answer };
+      return firebase.update(firebase.ref(firebase.db), updates);
+    },
+    async submitOracleAnswer(roundId, profile, value) {
+      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      const answerRef = firebase.ref(firebase.db, `oracleAnswers/${roundId}/${profile.teamId}`);
+      let created = false;
+      const result = await firebase.runTransaction(answerRef, current => {
+        if (current) return;
+        created = true;
+        return { value, playerName: profile.name, claimantId: firebase.auth.currentUser.uid, createdAt: Date.now() };
+      });
+      return { accepted: created && result.committed, answer: result.snapshot.val()?.value };
+    },
+    async finishOracle(state) {
+      const oracle = state.settings.oracle;
+      const secret = (await firebase.get(firebase.ref(firebase.db, `oracleSecrets/${oracle.roundId}`))).val();
+      if (!secret || !Number.isFinite(Number(secret.answer))) throw new Error("oracle-secret-missing");
+      const result = buildOracleResult(state, Number(secret.answer));
+      const updates = {};
+      updates[`games/oracle-${result.roundId}`] = result.game;
+      updates["settings/oracle/active"] = false;
+      updates["settings/oracle/revealed"] = true;
+      updates["settings/oracle/results"] = result.results;
+      updates["settings/oracle/answer"] = Number(secret.answer);
+      updates[`oracleSecrets/${result.roundId}`] = null;
+      updates["settings/updatedAt"] = firebase.serverTimestamp();
+      await firebase.update(firebase.ref(firebase.db), updates);
+    },
+    hideOracle() { return firebase.update(firebase.ref(firebase.db, "settings/oracle"), { active: false, revealed: false }); }
   };
 }
 
@@ -103,7 +145,11 @@ function localStore() {
       state.settings.updatedAt = Date.now();
       write(state);
       return { awarded: true, teamId: profile.teamId };
-    }
+    },
+    async startOracle({ question, answer, unit, minutes }) { const state = read(); const startedAt = Date.now(); state.settings.oracle = { active: true, revealed: false, roundId: startedAt.toString(36), question, answer, unit, startedAt, endsAt: startedAt + minutes * 60000, results: {} }; write(state); },
+    async submitOracleAnswer(roundId, profile, value) { const state = read(); const oracle = state.settings.oracle || {}; if (!oracle.active || oracle.roundId !== roundId || oracle.endsAt <= Date.now()) throw new Error("oracle-closed"); const round = state.oracleAnswers[roundId] ||= {}; if (round[profile.teamId]) return { accepted: false, answer: round[profile.teamId].value }; round[profile.teamId] = { value, playerName: profile.name, claimantId: profile.id, createdAt: Date.now() }; write(state); return { accepted: true, answer: value }; },
+    async finishOracle(state) { const latest = read(); const result = buildOracleResult(state || latest); latest.games[`oracle-${result.roundId}`] = result.game; latest.settings.oracle = { ...latest.settings.oracle, active: false, revealed: true, results: result.results }; latest.settings.updatedAt = Date.now(); write(latest); },
+    async hideOracle() { const state = read(); state.settings.oracle = { ...state.settings.oracle, active: false, revealed: false }; write(state); }
   };
 }
 
@@ -141,5 +187,35 @@ function huntGame(roundId, target, profile, points, claimantId) {
 }
 
 function normalise(value) {
-  return { settings: { ...EMPTY_STATE.settings, ...(value?.settings || {}) }, games: value?.games || {} };
+  return {
+    settings: {
+      ...EMPTY_STATE.settings,
+      ...(value?.settings || {}),
+      hunt: { ...EMPTY_STATE.settings.hunt, ...(value?.settings?.hunt || {}) },
+      oracle: { ...EMPTY_STATE.settings.oracle, ...(value?.settings?.oracle || {}) }
+    },
+    games: value?.games || {},
+    oracleAnswers: value?.oracleAnswers || {}
+  };
+}
+
+function buildOracleResult(state, answerOverride = null) {
+  const oracle = state.settings.oracle;
+  const correctAnswer = answerOverride ?? Number(oracle.answer);
+  const answers = state.oracleAnswers?.[oracle.roundId] || {};
+  const entries = TEAMS.filter(team => answers[team.id]).map(team => ({ team, value: Number(answers[team.id].value), error: Math.abs(Number(answers[team.id].value) - correctAnswer) }));
+  const errors = [...new Set(entries.map(entry => entry.error))].sort((a, b) => a - b);
+  const scale = [10, 8, 6, 4, 2];
+  const points = Object.fromEntries(TEAMS.map(team => [team.id, 0]));
+  const results = {};
+  entries.forEach(entry => {
+    const awarded = scale[Math.min(errors.indexOf(entry.error), scale.length - 1)];
+    points[entry.team.id] = awarded;
+    results[entry.team.id] = { value: entry.value, error: entry.error, points: awarded };
+  });
+  return {
+    roundId: oracle.roundId,
+    results,
+    game: { name: "Das Orakel", round: oracle.question, resultText: `Lösung: ${correctAnswer}${oracle.unit ? ` ${oracle.unit}` : ""}`, points, source: "oracle", createdAt: Date.now(), updatedAt: Date.now() }
+  };
 }

@@ -24,6 +24,18 @@
         <div class="hunt-admin-actions"><button id="startTeamHunt" class="primary-button" type="button">12-Minuten-Jagd starten</button><button id="stopTeamHunt" class="secondary-button hidden" type="button">Jagd beenden</button></div>
       </section>
 
+      <section class="panel oracle-admin-panel">
+        <div class="panel-title"><div><p class="eyebrow">Schätzrunde</p><h2>Das Orakel</h2></div></div>
+        <form id="oracleAdminForm">
+          <label>Schätzfrage<input id="oracleAdminQuestion" type="text" maxlength="140" required placeholder="z. B. Wie viele Schrauben sind im Glas?"></label>
+          <div class="form-grid"><label>Korrekte Zahl<input id="oracleAdminAnswer" type="number" inputmode="decimal" step="any" required placeholder="347"></label><label>Einheit<input id="oracleAdminUnit" type="text" maxlength="20" placeholder="z. B. Stück, g oder cm"></label></div>
+          <label>Dauer in Minuten<input id="oracleAdminMinutes" type="number" inputmode="numeric" min="1" max="15" value="3" required></label>
+          <button id="startOracle" class="primary-button" type="submit">Orakel starten</button>
+        </form>
+        <div id="oracleAdminRunning" class="hidden"><p id="oracleAdminStatus" class="save-message"></p><div class="hunt-admin-actions"><button id="finishOracle" class="primary-button" type="button">Beenden und auswerten</button></div></div>
+        <div id="oracleAdminRevealed" class="hidden"><p class="save-message">Die Lösung und Punkte sind öffentlich sichtbar.</p><button id="hideOracle" class="secondary-button" type="button">Orakel ausblenden</button></div>
+      </section>
+
       <section class="panel">
         <div class="panel-title"><div><p class="eyebrow">Neuer Eintrag</p><h2 id="formTitle">Spielresultat erfassen</h2></div><button id="cancelEdit" class="text-button hidden">Abbrechen</button></div>
         <form id="resultForm">

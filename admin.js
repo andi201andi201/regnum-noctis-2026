@@ -48,6 +48,18 @@ $("#stopTeamHunt").addEventListener("click", async () => {
   await store.stopHunt();
   toast("Nachtjagd beendet");
 });
+$("#oracleAdminForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!confirm("Orakel jetzt starten? Die Frage wird sofort für alle Reiche sichtbar.")) return;
+  await store.startOracle({ question: $("#oracleAdminQuestion").value.trim(), answer: Number($("#oracleAdminAnswer").value), unit: $("#oracleAdminUnit").value.trim(), minutes: Number($("#oracleAdminMinutes").value) });
+  toast("Orakel gestartet");
+});
+$("#finishOracle").addEventListener("click", async () => {
+  if (!confirm("Orakel beenden und Punkte nach Nähe verteilen?")) return;
+  await store.finishOracle(currentState);
+  toast("Orakel ausgewertet");
+});
+$("#hideOracle").addEventListener("click", async () => { await store.hideOracle(); toast("Orakel ausgeblendet"); });
 
 $("#resultForm").addEventListener("submit", async event => {
   event.preventDefault();
@@ -73,6 +85,14 @@ function renderAdmin(state) {
   $("#startTeamHunt").classList.toggle("hidden", huntRunning);
   $("#stopTeamHunt").classList.toggle("hidden", !huntRunning);
   $("#huntAdminStatus").textContent = huntRunning ? `Aktiv bis ${formatTime(hunt.endsAt)} · Runde ${hunt.roundId}` : "Nicht aktiv. Beim Start beginnt der Countdown sofort.";
+  const oracle = state.settings.oracle || {};
+  $("#oracleAdminForm").classList.toggle("hidden", oracle.active || oracle.revealed);
+  $("#oracleAdminRunning").classList.toggle("hidden", !oracle.active);
+  $("#oracleAdminRevealed").classList.toggle("hidden", !oracle.revealed);
+  if (oracle.active) {
+    const answerCount = Object.keys(state.oracleAnswers?.[oracle.roundId] || {}).length;
+    $("#oracleAdminStatus").textContent = `${answerCount} von 5 Reichen haben geantwortet · Ende ${formatTime(oracle.endsAt)}`;
+  }
   const games = sortedGames(state.games);
   $("#adminResults").innerHTML = games.map(game => `<article class="admin-result"><div><span>${formatTime(game.createdAt, true)}</span><strong>${escapeHtml(game.name)}</strong><small>${escapeHtml(game.round || game.resultText || "")}</small></div><div class="admin-actions"><button data-action="edit" data-id="${game.id}">Bearbeiten</button><button class="danger" data-action="delete" data-id="${game.id}">Löschen</button></div></article>`).join("");
   $("#adminEmpty").classList.toggle("hidden", games.length > 0);

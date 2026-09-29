@@ -26,7 +26,8 @@ function renderHunt(state) {
   const hunt = state.settings.hunt || {};
   const running = hunt.active && hunt.endsAt > Date.now();
   if (!running) {
-    $("#huntLocked").classList.remove("hidden");
+    $("#huntCard").classList.add("hidden");
+    $("#huntLocked").classList.add("hidden");
     $("#huntIntro").classList.add("hidden");
     $("#huntCamera").classList.add("hidden");
     $("#huntSuccess").classList.add("hidden");
@@ -34,6 +35,7 @@ function renderHunt(state) {
     if (stream) stopCameraOnly();
     return;
   }
+  $("#huntCard").classList.remove("hidden");
   $("#huntLocked").classList.add("hidden");
   if ($("#huntCamera").classList.contains("hidden") && $("#huntSuccess").classList.contains("hidden")) $("#huntIntro").classList.remove("hidden");
   const remaining = Math.max(0, hunt.endsAt - Date.now());

@@ -10,6 +10,18 @@
         ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || (!data.exists() && newData.child('source').val() === 'team-hunt' && root.child('settings/hunt/active').val() === true && root.child('settings/hunt/roundId').val() === newData.child('roundId').val() && now < root.child('settings/hunt/endsAt').val() && $gameId === 'hunt-' + newData.child('roundId').val() + '-' + newData.child('teamId').val() + '-' + newData.child('targetId').val() && newData.child('claimantId').val() === auth.uid && newData.child('playerName').isString() && newData.child('playerName').val().length > 0 && newData.child('playerName').val().length <= 32 && (newData.child('teamId').val() === 'draco' || newData.child('teamId').val() === 'serpens' || newData.child('teamId').val() === 'lupus' || newData.child('teamId').val() === 'corvus' || newData.child('teamId').val() === 'noctua') && (newData.child('targetId').val() === 'bottle' || newData.child('targetId').val() === 'cup' || newData.child('targetId').val() === 'chair' || newData.child('targetId').val() === 'backpack' || newData.child('targetId').val() === 'book' || newData.child('targetId').val() === 'cell-phone' || newData.child('targetId').val() === 'spoon' || newData.child('targetId').val() === 'fork' || newData.child('targetId').val() === 'bowl' || newData.child('targetId').val() === 'banana') && newData.child('points/draco').val() === (newData.child('teamId').val() === 'draco' ? 2 : 0) && newData.child('points/serpens').val() === (newData.child('teamId').val() === 'serpens' ? 2 : 0) && newData.child('points/lupus').val() === (newData.child('teamId').val() === 'lupus' ? 2 : 0) && newData.child('points/corvus').val() === (newData.child('teamId').val() === 'corvus' ? 2 : 0) && newData.child('points/noctua').val() === (newData.child('teamId').val() === 'noctua' ? 2 : 0)))"
       }
     },
+    "oracleAnswers": {
+      ".read": true,
+      "$roundId": {
+        "$teamId": {
+          ".write": "auth != null && !data.exists() && root.child('settings/oracle/active').val() === true && root.child('settings/oracle/roundId').val() === $roundId && now < root.child('settings/oracle/endsAt').val() && ($teamId === 'draco' || $teamId === 'serpens' || $teamId === 'lupus' || $teamId === 'corvus' || $teamId === 'noctua') && newData.child('value').isNumber() && newData.child('playerName').isString() && newData.child('playerName').val().length > 0 && newData.child('playerName').val().length <= 32 && newData.child('claimantId').val() === auth.uid"
+        }
+      }
+    },
+    "oracleSecrets": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+    },
     "admins": {
       ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
       ".write": false

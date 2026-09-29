@@ -53,7 +53,7 @@
       <p>Die letzten Punkte werden im Verborgenen gezählt. Welches Reich wird über die Nacht herrschen?</p>
     </section>
 
-    <section id="huntCard" class="hunt-card">
+    <section id="huntCard" class="hunt-card hidden">
       <div class="hunt-topline"><span class="hunt-rune">✦</span><span>Nachtjagd · Die zehn Zeichen</span><strong id="huntTimer">Versiegelt</strong></div>
       <div id="huntLocked" class="hunt-intro">
         <p class="eyebrow">Das Orakel schweigt noch</p>
@@ -86,6 +86,19 @@
       </div>
     </section>
 
+    <section id="oracleCard" class="oracle-card hidden" aria-live="polite">
+      <div class="hunt-topline"><span class="hunt-rune">☾</span><span>Das Orakel</span><strong id="oracleTimer"></strong></div>
+      <div id="oracleQuestion" class="oracle-content">
+        <p class="eyebrow">Eine Antwort pro Reich</p>
+        <h2 id="oracleQuestionText"></h2>
+        <p>Beratet euch gut. Die erste übermittelte Antwort eures Reiches wird versiegelt.</p>
+        <form id="oracleAnswerForm"><div class="oracle-answer-row"><input id="oracleAnswer" type="number" inputmode="decimal" step="any" required placeholder="Eure Schätzung"><span id="oracleUnit"></span></div><button class="hunt-button" type="submit">Antwort versiegeln</button></form>
+        <div id="oracleSealed" class="oracle-sealed hidden"><div>✓</div><strong>Antwort versiegelt</strong><span id="oracleOwnAnswer"></span></div>
+      </div>
+      <div id="oracleWaiting" class="oracle-content hidden"><p class="eyebrow">Die Zeit ist abgelaufen</p><h2>Das Orakel entscheidet</h2><p>Die Spielleitung wertet die Antworten aus.</p></div>
+      <div id="oracleReveal" class="oracle-content hidden"><p class="eyebrow">Das Orakel hat gesprochen</p><h2 id="oracleSolution"></h2><div id="oracleResults" class="oracle-results"></div></div>
+    </section>
+
     <div id="liveContent">
       <section class="section-head">
         <div><p class="eyebrow">Machtverhältnisse</p><h2>Live-Rangliste</h2></div>
@@ -114,5 +127,6 @@
   <canvas id="confetti" aria-hidden="true"></canvas>
   <script type="module" src="app.js"></script>
   <script type="module" src="hunt.js"></script>
+  <script type="module" src="oracle.js"></script>
 </body>
 </html>
