@@ -33,6 +33,9 @@ function firebaseStore() {
       ];
       return () => stops.forEach(stop => stop());
     },
+    subscribeOracleQuestions(callback) { return firebase.onValue(firebase.ref(firebase.db, "oracleQuestions"), snapshot => callback(snapshot.val() || {})); },
+    async saveOracleQuestion(question, id = null) { const questionRef = id ? firebase.ref(firebase.db, `oracleQuestions/${id}`) : firebase.push(firebase.ref(firebase.db, "oracleQuestions")); await firebase.set(questionRef, { ...question, updatedAt: Date.now() }); },
+    deleteOracleQuestion(id) { return firebase.remove(firebase.ref(firebase.db, `oracleQuestions/${id}`)); },
     auth: {
       login: (email, password) => firebase.signInWithEmailAndPassword(firebase.auth, email, password),
       logout: () => firebase.signOut(firebase.auth),
@@ -74,11 +77,11 @@ function firebaseStore() {
       });
       return { awarded: created && result.committed, teamId: result.snapshot.val()?.teamId || profile.teamId };
     },
-    startOracle({ question, answer, unit, minutes }) {
+    startOracle({ question, answer, unit, minutes, maxPoints = 5 }) {
       const startedAt = Date.now();
       const roundId = startedAt.toString(36);
       const updates = {};
-      updates["settings/oracle"] = { active: true, revealed: false, roundId, question, unit, startedAt, endsAt: startedAt + minutes * 60000, results: {} };
+      updates["settings/oracle"] = { active: true, revealed: false, roundId, question, unit, maxPoints, startedAt, endsAt: startedAt + minutes * 60000, results: {} };
       updates[`oracleSecrets/${roundId}`] = { answer };
       return firebase.update(firebase.ref(firebase.db), updates);
     },
@@ -120,6 +123,9 @@ function localStore() {
   return {
     demo: true,
     subscribe(callback) { listeners.add(callback); callback(read()); return () => listeners.delete(callback); },
+    subscribeOracleQuestions(callback) { const listener = state => callback(state.oracleQuestions || {}); listeners.add(listener); callback(read().oracleQuestions || {}); return () => listeners.delete(listener); },
+    async saveOracleQuestion(question, id = null) { const state = read(); state.oracleQuestions[id || `question-${Date.now()}`] = { ...question, updatedAt: Date.now() }; write(state); },
+    async deleteOracleQuestion(id) { const state = read(); delete state.oracleQuestions[id]; write(state); },
     auth: { login: async () => ({ user: { uid: "demo" } }), logout: async () => {}, observe: callback => { callback({ uid: "demo" }); return () => {}; } },
     async saveGame(game, id = null) { const state = read(); state.games[id || `demo-${Date.now()}`] = game; state.settings.updatedAt = Date.now(); write(state); },
     async claimChallenge(challengeId, profile, points) {
@@ -146,7 +152,7 @@ function localStore() {
       write(state);
       return { awarded: true, teamId: profile.teamId };
     },
-    async startOracle({ question, answer, unit, minutes }) { const state = read(); const startedAt = Date.now(); state.settings.oracle = { active: true, revealed: false, roundId: startedAt.toString(36), question, answer, unit, startedAt, endsAt: startedAt + minutes * 60000, results: {} }; write(state); },
+    async startOracle({ question, answer, unit, minutes, maxPoints = 5 }) { const state = read(); const startedAt = Date.now(); state.settings.oracle = { active: true, revealed: false, roundId: startedAt.toString(36), question, answer, unit, maxPoints, startedAt, endsAt: startedAt + minutes * 60000, results: {} }; write(state); },
     async submitOracleAnswer(roundId, profile, value) { const state = read(); const oracle = state.settings.oracle || {}; if (!oracle.active || oracle.roundId !== roundId || oracle.endsAt <= Date.now()) throw new Error("oracle-closed"); const round = state.oracleAnswers[roundId] ||= {}; if (round[profile.teamId]) return { accepted: false, answer: round[profile.teamId].value }; round[profile.teamId] = { value, playerName: profile.name, claimantId: profile.id, createdAt: Date.now() }; write(state); return { accepted: true, answer: value }; },
     async finishOracle(state) { const latest = read(); const result = buildOracleResult(state || latest); latest.games[`oracle-${result.roundId}`] = result.game; latest.settings.oracle = { ...latest.settings.oracle, active: false, revealed: true, results: result.results }; latest.settings.updatedAt = Date.now(); write(latest); },
     async hideOracle() { const state = read(); state.settings.oracle = { ...state.settings.oracle, active: false, revealed: false }; write(state); }
@@ -195,7 +201,8 @@ function normalise(value) {
       oracle: { ...EMPTY_STATE.settings.oracle, ...(value?.settings?.oracle || {}) }
     },
     games: value?.games || {},
-    oracleAnswers: value?.oracleAnswers || {}
+    oracleAnswers: value?.oracleAnswers || {},
+    oracleQuestions: value?.oracleQuestions || {}
   };
 }
 
@@ -205,7 +212,8 @@ function buildOracleResult(state, answerOverride = null) {
   const answers = state.oracleAnswers?.[oracle.roundId] || {};
   const entries = TEAMS.filter(team => answers[team.id]).map(team => ({ team, value: Number(answers[team.id].value), error: Math.abs(Number(answers[team.id].value) - correctAnswer) }));
   const errors = [...new Set(entries.map(entry => entry.error))].sort((a, b) => a - b);
-  const scale = [10, 8, 6, 4, 2];
+  const maxPoints = Math.max(1, Number(oracle.maxPoints) || 5);
+  const scale = [1, .8, .6, .4, .2].map(factor => Math.max(1, Math.round(maxPoints * factor)));
   const points = Object.fromEntries(TEAMS.map(team => [team.id, 0]));
   const results = {};
   entries.forEach(entry => {

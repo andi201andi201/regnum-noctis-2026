@@ -11,10 +11,11 @@ export const EMPTY_STATE = {
     mode: "live",
     updatedAt: 0,
     hunt: { active: false, roundId: "", startedAt: 0, endsAt: 0 },
-    oracle: { active: false, revealed: false, roundId: "", question: "", answer: 0, unit: "", startedAt: 0, endsAt: 0, results: {} }
+    oracle: { active: false, revealed: false, roundId: "", question: "", answer: 0, unit: "", maxPoints: 5, startedAt: 0, endsAt: 0, results: {} }
   },
   games: {},
-  oracleAnswers: {}
+  oracleAnswers: {},
+  oracleQuestions: {}
 };
 
 export function totalsFromGames(games = {}) {

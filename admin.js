@@ -4,7 +4,7 @@ import { HUNT_DURATION_MINUTES } from "./hunt-data.js";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
-let currentState = null, editingId = null;
+let currentState = null, editingId = null, oracleQuestions = {}, oracleQuestionsUnsubscribe = null;
 const ADMIN_PASS_HASH = "a80ff0faa95c643a50fbb4252140f964cf050b07a179843c9baa7a2783559da4";
 
 $("#scoreInputs").innerHTML = TEAMS.map(team => `<label class="score-field" style="--team:${team.color}"><span><i></i>${team.name}</span><input id="score-${team.id}" type="number" inputmode="numeric" value="0" step="1" required></label>`).join("");
@@ -50,9 +50,21 @@ $("#stopTeamHunt").addEventListener("click", async () => {
 });
 $("#oracleAdminForm").addEventListener("submit", async event => {
   event.preventDefault();
-  if (!confirm("Orakel jetzt starten? Die Frage wird sofort für alle Reiche sichtbar.")) return;
-  await store.startOracle({ question: $("#oracleAdminQuestion").value.trim(), answer: Number($("#oracleAdminAnswer").value), unit: $("#oracleAdminUnit").value.trim(), minutes: Number($("#oracleAdminMinutes").value) });
-  toast("Orakel gestartet");
+  const id = $("#oracleQuestionId").value || null;
+  await store.saveOracleQuestion({ question: $("#oracleAdminQuestion").value.trim(), answer: Number($("#oracleAdminAnswer").value), unit: $("#oracleAdminUnit").value.trim(), minutes: Number($("#oracleAdminMinutes").value), maxPoints: Number($("#oracleAdminPoints").value) }, id);
+  resetOracleEditor();
+  toast(id ? "Frage aktualisiert" : "Frage vorbereitet");
+});
+$("#cancelOracleEdit").addEventListener("click", resetOracleEditor);
+$("#oracleQuestionList").addEventListener("click", async event => {
+  const button = event.target.closest("button[data-oracle-action]"); if (!button) return;
+  const question = oracleQuestions[button.dataset.id]; if (!question) return;
+  if (button.dataset.oracleAction === "start") {
+    if (!confirm(`Orakel „${question.question}“ jetzt starten? Die Zeit läuft sofort.`)) return;
+    await store.startOracle(question); toast("Orakel gestartet");
+  }
+  if (button.dataset.oracleAction === "edit") loadOracleEditor(button.dataset.id, question);
+  if (button.dataset.oracleAction === "delete" && confirm("Diese vorbereitete Frage wirklich löschen?")) { await store.deleteOracleQuestion(button.dataset.id); toast("Frage gelöscht"); }
 });
 $("#finishOracle").addEventListener("click", async () => {
   if (!confirm("Orakel beenden und Punkte nach Nähe verteilen?")) return;
@@ -86,7 +98,10 @@ function renderAdmin(state) {
   $("#stopTeamHunt").classList.toggle("hidden", !huntRunning);
   $("#huntAdminStatus").textContent = huntRunning ? `Aktiv bis ${formatTime(hunt.endsAt)} · Runde ${hunt.roundId}` : "Nicht aktiv. Beim Start beginnt der Countdown sofort.";
   const oracle = state.settings.oracle || {};
-  $("#oracleAdminForm").classList.toggle("hidden", oracle.active || oracle.revealed);
+  const oracleBusy = oracle.active || oracle.revealed;
+  $("#oracleAdminForm").classList.toggle("hidden", oracleBusy);
+  $("#oracleQuestionList").classList.toggle("hidden", oracleBusy);
+  $("#oracleQuestionsEmpty").classList.toggle("hidden", oracleBusy || Object.keys(oracleQuestions).length > 0);
   $("#oracleAdminRunning").classList.toggle("hidden", !oracle.active);
   $("#oracleAdminRevealed").classList.toggle("hidden", !oracle.revealed);
   if (oracle.active) {
@@ -98,10 +113,25 @@ function renderAdmin(state) {
   $("#adminEmpty").classList.toggle("hidden", games.length > 0);
 }
 
+function renderOracleQuestions() {
+  const entries = Object.entries(oracleQuestions).sort(([, a], [, b]) => (a.updatedAt || 0) - (b.updatedAt || 0));
+  $("#oracleQuestionCount").textContent = `${entries.length} / 10 Fragen`;
+  $("#oracleQuestionList").innerHTML = entries.map(([id, item], index) => `<article class="oracle-question-item"><div class="oracle-question-number">${index + 1}</div><div><strong>${escapeHtml(item.question)}</strong><small>Lösung: ${item.answer}${item.unit ? ` ${escapeHtml(item.unit)}` : ""} · ${item.minutes || 3} Min. · max. ${item.maxPoints || 5} Punkte</small></div><div class="admin-actions"><button data-oracle-action="start" data-id="${id}">Start</button><button data-oracle-action="edit" data-id="${id}">Bearbeiten</button><button class="danger" data-oracle-action="delete" data-id="${id}">Löschen</button></div></article>`).join("");
+  const busy = currentState?.settings?.oracle?.active || currentState?.settings?.oracle?.revealed;
+  $("#oracleQuestionsEmpty").classList.toggle("hidden", busy || entries.length > 0);
+}
+
+function loadOracleEditor(id, question) { $("#oracleQuestionId").value = id; $("#oracleAdminQuestion").value = question.question || ""; $("#oracleAdminAnswer").value = question.answer; $("#oracleAdminUnit").value = question.unit || ""; $("#oracleAdminMinutes").value = question.minutes || 3; $("#oracleAdminPoints").value = question.maxPoints || 5; $("#saveOracleQuestion").textContent = "Änderungen speichern"; $("#cancelOracleEdit").classList.remove("hidden"); $("#oracleAdminForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
+function resetOracleEditor() { $("#oracleAdminForm").reset(); $("#oracleQuestionId").value = ""; $("#oracleAdminMinutes").value = 3; $("#oracleAdminPoints").value = 5; $("#saveOracleQuestion").textContent = "Frage speichern"; $("#cancelOracleEdit").classList.add("hidden"); }
+
 function loadEdit(id) { const game = currentState.games[id]; if (!game) return; editingId = id; $("#formTitle").textContent = "Resultat korrigieren"; $("#cancelEdit").classList.remove("hidden"); $("#gameName").value = game.name || ""; $("#roundName").value = game.round || ""; $("#resultText").value = game.resultText || ""; TEAMS.forEach(team => $(`#score-${team.id}`).value = Number(game.points?.[team.id] || 0)); $("#resultForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
 function resetForm() { editingId = null; $("#resultForm").reset(); TEAMS.forEach(team => $(`#score-${team.id}`).value = 0); $("#formTitle").textContent = "Spielresultat erfassen"; $("#cancelEdit").classList.add("hidden"); $("#saveMessage").textContent = ""; }
 function toast(message) { $("#toast").textContent = message; $("#toast").classList.add("show"); setTimeout(() => $("#toast").classList.remove("show"), 2200); }
-function setAccess(granted) { $("#loginPanel").classList.toggle("hidden", granted); $("#adminContent").classList.toggle("hidden", !granted); $("#logoutBtn").classList.toggle("hidden", !granted); }
+function setAccess(granted) {
+  $("#loginPanel").classList.toggle("hidden", granted); $("#adminContent").classList.toggle("hidden", !granted); $("#logoutBtn").classList.toggle("hidden", !granted);
+  if (granted && !oracleQuestionsUnsubscribe) oracleQuestionsUnsubscribe = store.subscribeOracleQuestions(questions => { oracleQuestions = questions; renderOracleQuestions(); });
+  if (!granted && oracleQuestionsUnsubscribe) { oracleQuestionsUnsubscribe(); oracleQuestionsUnsubscribe = null; oracleQuestions = {}; }
+}
 async function sha256(value) { const bytes = new TextEncoder().encode(value); const hash = await crypto.subtle.digest("SHA-256", bytes); return [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, "0")).join(""); }
 function humanAuthError(code) { return ({ "auth/invalid-credential": "E-Mail oder Passwort ist falsch.", "auth/too-many-requests": "Zu viele Versuche. Bitte kurz warten.", "auth/network-request-failed": "Keine Verbindung. Bitte Internet prüfen." })[code] || "Login fehlgeschlagen."; }
 function escapeHtml(value = "") { const div = document.createElement("div"); div.textContent = value; return div.innerHTML; }

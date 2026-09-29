@@ -28,6 +28,7 @@ function renderOracle(state) {
     $("#oracleTimer").textContent = `${Math.floor(remaining / 60000)}:${String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0")}`;
     $("#oracleQuestionText").textContent = oracle.question;
     $("#oracleUnit").textContent = oracle.unit || "";
+    $("#oraclePointsHint").textContent = `Bis zu ${oracle.maxPoints || 5} Punkte.`;
     const profile = getPlayerProfile();
     const answer = state.oracleAnswers?.[oracle.roundId]?.[profile?.teamId];
     $("#oracleAnswerForm").classList.toggle("hidden", !!answer);
