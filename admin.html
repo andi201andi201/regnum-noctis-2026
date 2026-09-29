@@ -9,12 +9,11 @@
 </head>
 <body class="admin-page">
   <div class="stars" aria-hidden="true"></div>
-  <header class="admin-header shell"><a class="back-link" href="index.html">← Rangliste</a><div><p class="eyebrow">Spielleitung</p><h1>Adminbereich</h1></div><button id="logoutBtn" class="text-button hidden">Abmelden</button></header>
+  <header class="admin-header shell"><a class="back-link" href="index.html">← Rangliste</a><div><p class="eyebrow">Spielleitung</p><h1>Adminbereich</h1></div><button id="logoutBtn" class="text-button hidden">Sperren</button></header>
   <main class="shell admin-shell">
     <section id="loginPanel" class="panel login-panel">
       <p class="eyebrow">Zutritt nur für Spielleitung</p><h2>Einloggen</h2>
-      <form id="loginForm"><label>E-Mail<input id="email" type="email" autocomplete="username" required></label><label>Passwort<input id="password" type="password" autocomplete="current-password" required></label><button class="primary-button" type="submit">Tor öffnen</button><p id="loginError" class="form-error"></p></form>
-      <div id="demoLogin" class="demo-note hidden"><strong>Demomodus aktiv.</strong> Firebase ist noch nicht konfiguriert. Du kannst die Funktionen lokal ohne Login testen.<button id="enterDemo" class="secondary-button">Demo öffnen</button></div>
+      <form id="loginForm"><label id="firebaseEmailField" class="hidden">E-Mail<input id="email" type="email" autocomplete="username"></label><label>Passwort<input id="password" type="password" autocomplete="current-password" required autofocus></label><button class="primary-button" type="submit">Tor öffnen</button><p id="loginError" class="form-error"></p></form>
     </section>
 
     <div id="adminContent" class="hidden">

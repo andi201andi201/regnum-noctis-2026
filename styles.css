@@ -12,3 +12,15 @@
 .winner-crest{width:min(72vw,300px);height:min(72vw,300px);overflow:hidden;border-radius:24px;clip-path:none;background:#0b0b0d}
 .winner-crest img{width:100%;height:100%;object-fit:cover}
 @media(max-width:560px){.rank-card{grid-template-columns:23px 60px 1fr auto}.crest{width:60px;height:60px}}
+
+/* Bewegter Nachthimmel */
+body{background:radial-gradient(circle at 68% 5%,#292848 0,#12131f 24%,#08090d 62%);background-attachment:fixed}
+.stars{z-index:0;opacity:1;overflow:hidden;mask-image:none;background-image:radial-gradient(circle,#ffffffb5 0 1px,transparent 1.4px),radial-gradient(circle,#d9c37ab8 0 .8px,transparent 1.2px),radial-gradient(circle,#8ca7d9a6 0 .7px,transparent 1.1px);background-size:83px 83px,137px 137px,211px 211px;background-position:9px 17px,61px 33px,112px 79px;animation:star-drift 100s linear infinite}
+.stars::before{content:"";position:absolute;inset:-35%;background:radial-gradient(ellipse at center,rgba(174,180,222,.22) 0,rgba(113,119,166,.11) 24%,rgba(60,64,103,.04) 43%,transparent 68%);transform:rotate(-20deg) scale(.75);filter:blur(22px);animation:milky-breathe 9s ease-in-out infinite alternate}
+.stars::after{content:"";position:absolute;inset:0;background-image:radial-gradient(circle at 8% 18%,#fff 0 1.3px,transparent 2px),radial-gradient(circle at 23% 72%,#fff8d0 0 1.1px,transparent 2px),radial-gradient(circle at 41% 31%,#dce8ff 0 1.4px,transparent 2.2px),radial-gradient(circle at 63% 82%,#fff 0 1.2px,transparent 2px),radial-gradient(circle at 79% 27%,#fff4c5 0 1.5px,transparent 2.3px),radial-gradient(circle at 92% 61%,#dce8ff 0 1.1px,transparent 2px);filter:drop-shadow(0 0 4px #dce8ff);animation:star-flicker 3.8s ease-in-out infinite alternate}
+@keyframes star-drift{to{background-position:92px 100px,198px 170px,323px 290px}}
+@keyframes star-flicker{0%,18%{opacity:.3}42%{opacity:.9}61%{opacity:.45}100%{opacity:1}}
+@keyframes milky-breathe{from{opacity:.55;transform:rotate(-20deg) scale(.72)}to{opacity:1;transform:rotate(-17deg) scale(.8)}}
+.admin-lock{display:inline-grid;place-items:center;width:21px;height:21px;margin-left:6px;color:#575861!important;border:1px solid #ffffff0e;border-radius:50%;font-size:0;text-decoration:none;vertical-align:middle;transition:.2s}
+.admin-lock::before{content:"🔒";font-size:.62rem;filter:grayscale(1);opacity:.46}
+.admin-lock:hover,.admin-lock:focus-visible{border-color:#d9b66555;transform:translateY(-1px)}
