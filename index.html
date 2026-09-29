@@ -54,12 +54,17 @@
     </section>
 
     <section id="huntCard" class="hunt-card">
-      <div class="hunt-topline"><span class="hunt-rune">✦</span><span>Nachtjagd · Testauftrag</span><strong>+5 Punkte</strong></div>
-      <div id="huntIntro" class="hunt-intro">
-        <p class="eyebrow">Auftrag des Orakels</p>
-        <h2>Findet eine Flasche</h2>
-        <p>Richtet die Kamera auf eine echte Flasche und haltet sie kurz ruhig im Bild. Die Erkennung läuft direkt auf eurem Gerät – es wird kein Foto hochgeladen.</p>
-        <button id="startHunt" class="hunt-button" type="button">Kamera öffnen</button>
+      <div class="hunt-topline"><span class="hunt-rune">✦</span><span>Nachtjagd · Die zehn Zeichen</span><strong id="huntTimer">Versiegelt</strong></div>
+      <div id="huntLocked" class="hunt-intro">
+        <p class="eyebrow">Das Orakel schweigt noch</p>
+        <h2>Die Nachtjagd wartet</h2>
+        <p>Die Spielleitung öffnet die Jagd zur festgelegten Zeit. Dann habt ihr zwölf Minuten, um gemeinsam zehn Zeichen der Nacht zu finden.</p>
+      </div>
+      <div id="huntIntro" class="hunt-intro hidden">
+        <div class="hunt-heading"><div><p class="eyebrow">Gemeinsamer Teamauftrag</p><h2>Findet die zehn Zeichen</h2></div><strong id="huntCount">0 / 10</strong></div>
+        <p>Jeder Gegenstand zählt pro Reich einmal und bringt zwei Punkte. Ihr könnt mit mehreren Handys gleichzeitig suchen.</p>
+        <div id="huntTargets" class="hunt-targets"></div>
+        <button id="startHunt" class="hunt-button" type="button">Kamera starten</button>
       </div>
       <div id="huntCamera" class="hunt-camera hidden">
         <div class="camera-frame">
@@ -73,11 +78,11 @@
       </div>
       <div id="huntSuccess" class="hunt-success hidden" aria-live="polite">
         <div class="success-seal">✓</div>
-        <p class="eyebrow">Beweis bestätigt</p>
-        <h2>Flasche erkannt</h2>
-        <p id="huntSuccessText">Die fünf Zusatzpunkte werden deinem Reich gutgeschrieben.</p>
+        <p class="eyebrow">Zeichen bestätigt</p>
+        <h2 id="huntSuccessTitle">Gegenstand erkannt</h2>
+        <p id="huntSuccessText">Die Punkte werden deinem Reich gutgeschrieben.</p>
         <strong id="huntProof"></strong>
-        <button id="restartHunt" class="hunt-cancel" type="button">Zurück</button>
+        <button id="restartHunt" class="hunt-button" type="button">Weitersuchen</button>
       </div>
     </section>
 

@@ -1,5 +1,6 @@
 import { TEAMS, sortedGames, formatTime } from "./data.js";
 import { getStore } from "./store.js";
+import { HUNT_DURATION_MINUTES } from "./hunt-data.js";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -37,6 +38,16 @@ $("#logoutBtn").addEventListener("click", async () => {
 });
 
 document.querySelectorAll("[data-mode]").forEach(button => button.addEventListener("click", async () => { await store.setMode(button.dataset.mode); toast(`Modus auf „${button.textContent}“ gesetzt`); }));
+$("#startTeamHunt").addEventListener("click", async () => {
+  if (!confirm("Nachtjagd jetzt für alle Reiche starten? Die Zeit läuft sofort.")) return;
+  await store.startHunt(HUNT_DURATION_MINUTES);
+  toast("Nachtjagd gestartet");
+});
+$("#stopTeamHunt").addEventListener("click", async () => {
+  if (!confirm("Nachtjagd wirklich vorzeitig beenden?")) return;
+  await store.stopHunt();
+  toast("Nachtjagd beendet");
+});
 
 $("#resultForm").addEventListener("submit", async event => {
   event.preventDefault();
@@ -57,6 +68,11 @@ function renderAdmin(state) {
   const mode = state.settings.mode || "live";
   document.querySelectorAll("[data-mode]").forEach(button => button.classList.toggle("active", button.dataset.mode === mode));
   $("#modeHelp").textContent = { live: "Rangliste und Resultate sind für alle sichtbar.", frozen: "Publikum sieht keine Punkte – Admin bleibt bedienbar.", final: "Die Siegeransicht wird öffentlich angezeigt." }[mode];
+  const hunt = state.settings.hunt || {};
+  const huntRunning = hunt.active && hunt.endsAt > Date.now();
+  $("#startTeamHunt").classList.toggle("hidden", huntRunning);
+  $("#stopTeamHunt").classList.toggle("hidden", !huntRunning);
+  $("#huntAdminStatus").textContent = huntRunning ? `Aktiv bis ${formatTime(hunt.endsAt)} · Runde ${hunt.roundId}` : "Nicht aktiv. Beim Start beginnt der Countdown sofort.";
   const games = sortedGames(state.games);
   $("#adminResults").innerHTML = games.map(game => `<article class="admin-result"><div><span>${formatTime(game.createdAt, true)}</span><strong>${escapeHtml(game.name)}</strong><small>${escapeHtml(game.round || game.resultText || "")}</small></div><div class="admin-actions"><button data-action="edit" data-id="${game.id}">Bearbeiten</button><button class="danger" data-action="delete" data-id="${game.id}">Löschen</button></div></article>`).join("");
   $("#adminEmpty").classList.toggle("hidden", games.length > 0);

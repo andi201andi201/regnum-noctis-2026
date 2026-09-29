@@ -6,7 +6,7 @@ export const TEAMS = [
   { id: "noctua", name: "Noctua", title: "Reich der Eule", logo: "assets/teams/noctua.webp", color: "#c18a32", glow: "#f3bd57" }
 ];
 
-export const EMPTY_STATE = { settings: { mode: "live", updatedAt: 0 }, games: {} };
+export const EMPTY_STATE = { settings: { mode: "live", updatedAt: 0, hunt: { active: false, roundId: "", startedAt: 0, endsAt: 0 } }, games: {} };
 
 export function totalsFromGames(games = {}) {
   const totals = Object.fromEntries(TEAMS.map(team => [team.id, 0]));

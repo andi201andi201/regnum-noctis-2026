@@ -19,6 +19,11 @@
     <div id="adminContent" class="hidden">
       <section class="panel status-panel"><div><p class="eyebrow">Sichtbarkeit</p><h2>Modus steuern</h2></div><div class="segmented" role="group" aria-label="Anzeigemodus"><button data-mode="live">Live</button><button data-mode="frozen">Einfrieren</button><button data-mode="final">Finale</button></div><p class="mode-help" id="modeHelp"></p></section>
 
+      <section class="panel hunt-control-panel">
+        <div><p class="eyebrow">Gemeinsames Kurzspiel</p><h2>Nachtjagd steuern</h2><p id="huntAdminStatus" class="save-message"></p></div>
+        <div class="hunt-admin-actions"><button id="startTeamHunt" class="primary-button" type="button">12-Minuten-Jagd starten</button><button id="stopTeamHunt" class="secondary-button hidden" type="button">Jagd beenden</button></div>
+      </section>
+
       <section class="panel">
         <div class="panel-title"><div><p class="eyebrow">Neuer Eintrag</p><h2 id="formTitle">Spielresultat erfassen</h2></div><button id="cancelEdit" class="text-button hidden">Abbrechen</button></div>
         <form id="resultForm">
