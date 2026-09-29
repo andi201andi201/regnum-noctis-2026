@@ -30,6 +30,34 @@
       <p>Die letzten Punkte werden im Verborgenen gezählt. Welches Reich wird über die Nacht herrschen?</p>
     </section>
 
+    <section id="huntCard" class="hunt-card">
+      <div class="hunt-topline"><span class="hunt-rune">✦</span><span>Nachtjagd · Testauftrag</span><strong>+5 Punkte</strong></div>
+      <div id="huntIntro" class="hunt-intro">
+        <p class="eyebrow">Auftrag des Orakels</p>
+        <h2>Findet eine Flasche</h2>
+        <p>Richtet die Kamera auf eine echte Flasche und haltet sie kurz ruhig im Bild. Die Erkennung läuft direkt auf eurem Gerät – es wird kein Foto hochgeladen.</p>
+        <button id="startHunt" class="hunt-button" type="button">Kamera öffnen</button>
+      </div>
+      <div id="huntCamera" class="hunt-camera hidden">
+        <div class="camera-frame">
+          <video id="huntVideo" playsinline muted aria-label="Kamerabild für die Gegenstandserkennung"></video>
+          <canvas id="huntOverlay" aria-hidden="true"></canvas>
+          <div class="scan-corners" aria-hidden="true"></div>
+        </div>
+        <div class="hunt-progress"><i id="huntProgress"></i></div>
+        <p id="huntStatus" class="hunt-status" aria-live="polite">Erkennung wird geladen …</p>
+        <button id="cancelHunt" class="hunt-cancel" type="button">Kamera schliessen</button>
+      </div>
+      <div id="huntSuccess" class="hunt-success hidden" aria-live="polite">
+        <div class="success-seal">✓</div>
+        <p class="eyebrow">Beweis bestätigt</p>
+        <h2>Flasche erkannt</h2>
+        <p>Zeigt diesen Bildschirm der Spielleitung, um die fünf Zusatzpunkte zu erhalten.</p>
+        <strong id="huntProof"></strong>
+        <button id="restartHunt" class="hunt-cancel" type="button">Nochmals testen</button>
+      </div>
+    </section>
+
     <div id="liveContent">
       <section class="section-head">
         <div><p class="eyebrow">Machtverhältnisse</p><h2>Live-Rangliste</h2></div>
@@ -57,5 +85,6 @@
   <footer class="shell">Regnum Noctis 2026 · Rosswöschwyber <a class="admin-lock" href="admin.html" aria-label="Zugang Spielleitung" title="Spielleitung">♙</a></footer>
   <canvas id="confetti" aria-hidden="true"></canvas>
   <script type="module" src="app.js"></script>
+  <script type="module" src="hunt.js"></script>
 </body>
 </html>
