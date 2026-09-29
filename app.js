@@ -1,5 +1,6 @@
 import { TEAMS, totalsFromGames, sortedGames, formatTime } from "./data.js";
 import { getStore } from "./store.js";
+import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -8,6 +9,59 @@ let previousLeader = sessionStorage.getItem("regnum-leader");
 store.subscribe(render);
 $("#connectionText").textContent = store.demo ? "Lokaler Demomodus" : "Live verbunden";
 document.body.classList.add("ready");
+setupOnboarding();
+
+function setupOnboarding() {
+  let selectedTeamId = null;
+  let pendingProfile = null;
+  const onboarding = $("#onboarding");
+  $("#teamChoices").innerHTML = TEAMS.map(team => `
+    <label class="team-choice" style="--team:${team.color}">
+      <input type="radio" name="realm" value="${team.id}">
+      <span><img src="${team.logo}" alt=""><b>${team.name}</b><small>${team.title}</small></span>
+    </label>`).join("");
+
+  const open = () => {
+    const current = getPlayerProfile();
+    $("#playerName").value = current?.name || "";
+    selectedTeamId = current?.teamId || null;
+    document.querySelectorAll('input[name="realm"]').forEach(input => { input.checked = input.value === selectedTeamId; });
+    $("#storyStep").classList.add("hidden");
+    $("#joinStep").classList.remove("hidden");
+    onboarding.classList.remove("hidden");
+    document.body.classList.add("onboarding-open");
+  };
+
+  const close = profile => {
+    onboarding.classList.add("hidden");
+    document.body.classList.remove("onboarding-open");
+    const team = TEAMS.find(item => item.id === profile.teamId);
+    $("#playerBadge").innerHTML = `<img src="${team.logo}" alt=""> <span>${escapeHtml(profile.name)} · ${team.name}</span>`;
+    $("#playerBadge").classList.remove("hidden");
+  };
+
+  $("#teamChoices").addEventListener("change", event => { selectedTeamId = event.target.value; $("#joinError").textContent = ""; });
+  $("#joinForm").addEventListener("submit", event => {
+    event.preventDefault();
+    const name = $("#playerName").value.trim();
+    if (!name || !selectedTeamId) { $("#joinError").textContent = "Bitte Name eingeben und ein Reich wählen."; return; }
+    const team = TEAMS.find(item => item.id === selectedTeamId);
+    pendingProfile = { name, teamId: selectedTeamId };
+    $("#storyCrest").src = team.logo;
+    $("#storyCrest").alt = `Wappen ${team.name}`;
+    $("#storyTeam").textContent = team.name;
+    $("#storyText").textContent = TEAM_STORIES[team.id];
+    $("#joinStep").classList.add("hidden");
+    $("#storyStep").classList.remove("hidden");
+  });
+  $("#backToChoice").addEventListener("click", () => { $("#storyStep").classList.add("hidden"); $("#joinStep").classList.remove("hidden"); });
+  $("#enterRealm").addEventListener("click", () => close(savePlayerProfile(pendingProfile.name, pendingProfile.teamId)));
+  $("#playerBadge").addEventListener("click", open);
+
+  const profile = getPlayerProfile();
+  if (profile && TEAMS.some(team => team.id === profile.teamId) && profile.name) close(profile);
+  else open();
+}
 
 function render(state) {
   const mode = state.settings.mode || "live";

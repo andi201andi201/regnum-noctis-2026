@@ -3,9 +3,11 @@ import { EMPTY_STATE } from "./data.js";
 
 const STORAGE_KEY = "regnum-noctis-demo";
 let firebase = null;
+let storeInstance = null;
 
 export async function getStore() {
-  if (!isFirebaseConfigured) return localStore();
+  if (storeInstance) return storeInstance;
+  if (!isFirebaseConfigured) return (storeInstance = localStore());
   if (!firebase) {
     const [{ initializeApp }, auth, database] = await Promise.all([
       import("https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js"),
@@ -15,7 +17,7 @@ export async function getStore() {
     const app = initializeApp(firebaseConfig);
     firebase = { auth: auth.getAuth(app), db: database.getDatabase(app), ...auth, ...database };
   }
-  return firebaseStore();
+  return (storeInstance = firebaseStore());
 }
 
 function firebaseStore() {
@@ -33,6 +35,19 @@ function firebaseStore() {
       const gameRef = id ? firebase.ref(firebase.db, `games/${id}`) : firebase.push(firebase.ref(firebase.db, "games"));
       await firebase.set(gameRef, game);
     },
+    async claimChallenge(challengeId, profile, points) {
+      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      const uid = firebase.auth.currentUser.uid;
+      const gameId = `challenge-${challengeId}-${uid}`;
+      const gameRef = firebase.ref(firebase.db, `games/${gameId}`);
+      let created = false;
+      const result = await firebase.runTransaction(gameRef, current => {
+        if (current) return;
+        created = true;
+        return challengeGame(challengeId, profile, points, uid);
+      });
+      return { awarded: created && result.committed, teamId: result.snapshot.val()?.teamId || profile.teamId };
+    },
     deleteGame: id => firebase.remove(firebase.ref(firebase.db, `games/${id}`)),
     setMode: mode => firebase.update(firebase.ref(firebase.db, "settings"), { mode, updatedAt: firebase.serverTimestamp() })
   };
@@ -48,8 +63,33 @@ function localStore() {
     subscribe(callback) { listeners.add(callback); callback(read()); return () => listeners.delete(callback); },
     auth: { login: async () => ({ user: { uid: "demo" } }), logout: async () => {}, observe: callback => { callback({ uid: "demo" }); return () => {}; } },
     async saveGame(game, id = null) { const state = read(); state.games[id || `demo-${Date.now()}`] = game; state.settings.updatedAt = Date.now(); write(state); },
+    async claimChallenge(challengeId, profile, points) {
+      const state = read();
+      const id = `challenge-${challengeId}-${profile.id}`;
+      if (state.games[id]) return { awarded: false, teamId: state.games[id].teamId };
+      state.games[id] = challengeGame(challengeId, profile, points, profile.id);
+      state.settings.updatedAt = Date.now();
+      write(state);
+      return { awarded: true, teamId: profile.teamId };
+    },
     async deleteGame(id) { const state = read(); delete state.games[id]; state.settings.updatedAt = Date.now(); write(state); },
     async setMode(mode) { const state = read(); state.settings = { ...state.settings, mode, updatedAt: Date.now() }; write(state); }
+  };
+}
+
+function challengeGame(challengeId, profile, points, claimantId) {
+  return {
+    name: `Nachtjagd: ${challengeId === "bottle" ? "Flasche" : challengeId}`,
+    round: "Zusatzauftrag",
+    resultText: `${profile.name} · ${profile.teamId}`,
+    points,
+    source: "challenge",
+    challengeId,
+    claimantId,
+    playerName: profile.name,
+    teamId: profile.teamId,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
   };
 }
 

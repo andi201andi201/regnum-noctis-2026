@@ -1,3 +1,7 @@
+import { TEAMS } from "./data.js";
+import { getStore } from "./store.js";
+import { getPlayerProfile } from "./player.js";
+
 const $ = selector => document.querySelector(selector);
 
 const TARGET = "bottle";
@@ -13,6 +17,7 @@ let animationFrame = null;
 let lastDetectionAt = 0;
 let detectedSince = null;
 let completed = false;
+const store = await getStore();
 
 $("#startHunt").addEventListener("click", startHunt);
 $("#cancelHunt").addEventListener("click", stopHunt);
@@ -103,13 +108,33 @@ function drawDetection(detection, video) {
   ctx.fillText("FLASCHE", box.originX + 10, Math.max(25, box.originY - 10));
 }
 
-function finishHunt() {
+async function finishHunt() {
   completed = true;
-  const proof = createProofCode();
   stopCameraOnly();
   $("#huntCamera").classList.add("hidden");
   $("#huntSuccess").classList.remove("hidden");
-  $("#huntProof").textContent = `Nachtbeweis ${proof} · ${new Intl.DateTimeFormat("de-CH", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`;
+  const profile = getPlayerProfile();
+  const team = TEAMS.find(item => item.id === profile?.teamId);
+  if (!profile || !team) {
+    $("#huntSuccessText").textContent = "Name und Reich fehlen. Bitte wähle dein Reich erneut.";
+    $("#huntProof").textContent = "Keine Punkte gutgeschrieben";
+    return;
+  }
+  $("#huntSuccessText").textContent = `Die Punkte für ${team.name} werden gutgeschrieben …`;
+  $("#huntProof").textContent = "Wird gespeichert";
+  const points = Object.fromEntries(TEAMS.map(item => [item.id, item.id === team.id ? 5 : 0]));
+  try {
+    const claim = await store.claimChallenge("bottle", profile, points);
+    const creditedTeam = TEAMS.find(item => item.id === claim.teamId) || team;
+    $("#huntSuccessText").textContent = claim.awarded
+      ? `+5 Punkte wurden ${team.name} automatisch gutgeschrieben.`
+      : `Dieser Auftrag wurde auf diesem Gerät bereits für ${creditedTeam.name} gewertet.`;
+    $("#huntProof").textContent = claim.awarded ? `${profile.name} · ${team.name} · +5` : "Bereits eingelöst";
+  } catch (error) {
+    console.error(error);
+    $("#huntSuccessText").textContent = "Die Erkennung war erfolgreich, aber die Punkte konnten nicht gespeichert werden. Bitte versucht es erneut.";
+    $("#huntProof").textContent = "Speicherfehler";
+  }
 }
 
 function stopHunt() {

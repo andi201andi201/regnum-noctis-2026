@@ -16,7 +16,7 @@ Danach `http://localhost:8000` beziehungsweise `/admin.html` öffnen. Daten werd
 
 1. In der Firebase Console ein Projekt und eine Web-App erstellen.
 2. Realtime Database in der Region `europe-west1` erstellen.
-3. Authentication → Sign-in method → E-Mail/Passwort aktivieren.
+3. Authentication → Sign-in method → **E-Mail/Passwort und Anonym aktivieren**. Anonyme Konten werden für die einmalige Nachtjagd-Wertung verwendet.
 4. Unter Authentication zwei Benutzer für Andy und Livio anlegen und deren UID kopieren.
 5. In der Realtime Database einmalig folgende Daten erfassen:
 

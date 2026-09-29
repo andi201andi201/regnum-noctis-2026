@@ -13,11 +13,34 @@
 </head>
 <body>
   <div class="stars" aria-hidden="true"></div>
+  <section id="onboarding" class="onboarding" aria-labelledby="onboardingTitle">
+    <div class="onboarding-panel">
+      <div id="joinStep">
+        <p class="eyebrow">Dein Weg beginnt</p>
+        <h2 id="onboardingTitle">Tritt einem Reich bei</h2>
+        <p class="onboarding-lead">Nenne deinen Namen und wähle das Reich, für das du in dieser Nacht kämpfst.</p>
+        <form id="joinForm">
+          <label class="name-field">Dein Name<input id="playerName" type="text" maxlength="32" autocomplete="name" placeholder="Name eingeben" required></label>
+          <fieldset><legend>Wähle dein Reich</legend><div id="teamChoices" class="team-choices"></div></fieldset>
+          <p id="joinError" class="form-error"></p>
+          <button class="primary-button" type="submit">Herkunft enthüllen</button>
+        </form>
+      </div>
+      <div id="storyStep" class="story-step hidden">
+        <p class="eyebrow">Dein Reich</p>
+        <img id="storyCrest" alt="">
+        <h2 id="storyTeam"></h2>
+        <p id="storyText"></p>
+        <button id="enterRealm" class="primary-button" type="button">Ins Regnum eintreten</button>
+        <button id="backToChoice" class="text-button" type="button">Auswahl ändern</button>
+      </div>
+    </div>
+  </section>
   <header class="hero shell">
     <div class="eyebrow">Rosswöschwyber · Probeweekend</div>
     <h1>Regnum <span>Noctis</span></h1>
     <p class="subtitle">Die fünf Reiche der Nacht</p>
-    <div class="live-pill"><i></i><span id="connectionText">Verbinde …</span></div>
+    <div class="hero-pills"><div class="live-pill"><i></i><span id="connectionText">Verbinde …</span></div><button id="playerBadge" class="player-badge hidden" type="button" title="Name oder Reich ändern"></button></div>
   </header>
 
   <main class="shell">
@@ -52,9 +75,9 @@
         <div class="success-seal">✓</div>
         <p class="eyebrow">Beweis bestätigt</p>
         <h2>Flasche erkannt</h2>
-        <p>Zeigt diesen Bildschirm der Spielleitung, um die fünf Zusatzpunkte zu erhalten.</p>
+        <p id="huntSuccessText">Die fünf Zusatzpunkte werden deinem Reich gutgeschrieben.</p>
         <strong id="huntProof"></strong>
-        <button id="restartHunt" class="hunt-cancel" type="button">Nochmals testen</button>
+        <button id="restartHunt" class="hunt-cancel" type="button">Zurück</button>
       </div>
     </section>
 
