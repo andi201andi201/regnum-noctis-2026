@@ -1,15 +1,19 @@
-import { TEAMS, totalsFromGames, sortedGames, formatTime, BALLON_GAME, GAME_STATUSES, hasGameResult } from "./data.js?v=ballon-1";
-import { getStore } from "./store.js?v=ballon-1";
+import { TEAMS, totalsFromGames, sortedGames, formatTime, BALLON_GAME, GAME_STATUSES, hasGameResult } from "./data.js?v=games-2";
+import { getStore } from "./store.js?v=games-2";
 import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
-let previousLeader = sessionStorage.getItem("regnum-leader");
+let previousLeader = sessionStorage.getItem("regnum-leader"), currentState = null, victoryTimer = null;
 
 store.subscribe(render);
 $("#connectionText").textContent = store.demo ? "Lokaler Demomodus" : "Live verbunden";
 document.body.classList.add("ready");
 setupOnboarding();
+window.addEventListener("regnum-player-changed", () => {
+  if (currentState?.settings?.mode === "live") maybeCelebrateGameWinner(currentState.games?.[BALLON_GAME.id], BALLON_GAME.id);
+});
+$("#victoryCelebration").addEventListener("click", hideVictoryCelebration);
 
 function setupOnboarding() {
   let selectedTeamId = null;
@@ -64,6 +68,7 @@ function setupOnboarding() {
 }
 
 function render(state) {
+  currentState = state;
   const mode = state.settings.mode || "live";
   const games = sortedGames(state.games).filter(hasGameResult);
   const totals = totalsFromGames(state.games);
@@ -113,6 +118,36 @@ function renderBallonGame(game) {
   $("#ballonGameStatus").textContent = GAME_STATUSES[status] || GAME_STATUSES["not-started"];
   $("#ballonGameCard").dataset.status = status;
   $("#ballonGameDescription").textContent = BALLON_GAME.description;
+  if (status === "completed") maybeCelebrateGameWinner(game, BALLON_GAME.id);
+}
+
+function maybeCelebrateGameWinner(game, gameId) {
+  const winnerId = game?.ranking?.[0];
+  const resultVersion = `${game?.updatedAt || game?.createdAt || ""}:${winnerId || ""}`;
+  if (!winnerId || (!game?.updatedAt && !game?.createdAt) || game.status !== "completed") return;
+  const profile = getPlayerProfile();
+  if (!profile?.teamId) return;
+  const storageKey = `regnum-celebrated-${gameId}`;
+  if (localStorage.getItem(storageKey) === resultVersion) return;
+  localStorage.setItem(storageKey, resultVersion);
+  if (profile.teamId !== winnerId) return;
+  const team = TEAMS.find(item => item.id === winnerId);
+  if (!team) return;
+  const celebration = $("#victoryCelebration");
+  celebration.style.setProperty("--team", team.color);
+  $("#victoryCrest").src = team.logo;
+  $("#victoryCrest").alt = `Wappen ${team.name}`;
+  $("#victoryTeam").textContent = `${team.name} gewinnt!`;
+  $("#victoryText").textContent = `Dein Reich hat das ${game.name || "Spiel"} gewonnen.`;
+  celebration.classList.remove("hidden");
+  burstConfetti(team.color, 130);
+  clearTimeout(victoryTimer);
+  victoryTimer = setTimeout(hideVictoryCelebration, 4200);
+}
+
+function hideVictoryCelebration() {
+  $("#victoryCelebration").classList.add("hidden");
+  clearTimeout(victoryTimer);
 }
 
 function pointChips(points = {}) { return TEAMS.filter(team => Number(points[team.id]) !== 0).map(team => `<span style="--team:${team.color}"><i></i>${team.name} <b>${Number(points[team.id]) > 0 ? "+" : ""}${Number(points[team.id])}</b></span>`).join("") || '<span class="muted">Keine Punkte</span>'; }

@@ -1,5 +1,5 @@
 import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
-import { EMPTY_STATE, TEAMS } from "./data.js?v=ballon-1";
+import { EMPTY_STATE, TEAMS } from "./data.js?v=games-2";
 
 const STORAGE_KEY = "regnum-noctis-demo";
 let firebase = null;

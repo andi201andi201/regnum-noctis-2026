@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=ballon-1">
+  <link rel="stylesheet" href="styles.css?v=games-2">
 </head>
 <body>
   <div class="stars" aria-hidden="true"></div>
@@ -133,9 +133,19 @@
   </main>
 
   <footer class="shell">Regnum Noctis 2026 · Rosswöschwyber <a class="admin-lock" href="admin.html" aria-label="Zugang Spielleitung" title="Spielleitung">♙</a></footer>
+  <section id="victoryCelebration" class="victory-celebration hidden" role="status" aria-live="assertive" aria-label="Siegerehrung">
+    <div class="victory-panel">
+      <div class="victory-rays" aria-hidden="true"></div>
+      <p class="eyebrow">Sieg für dein Reich</p>
+      <img id="victoryCrest" alt="">
+      <h2 id="victoryTeam"></h2>
+      <p id="victoryText"></p>
+      <small>Antippen zum Schliessen</small>
+    </div>
+  </section>
   <canvas id="confetti" aria-hidden="true"></canvas>
-  <script type="module" src="app.js?v=ballon-1"></script>
-  <script type="module" src="hunt.js?v=ballon-1"></script>
-  <script type="module" src="oracle.js?v=ballon-1"></script>
+  <script type="module" src="app.js?v=games-2"></script>
+  <script type="module" src="hunt.js?v=games-2"></script>
+  <script type="module" src="oracle.js?v=games-2"></script>
 </body>
 </html>

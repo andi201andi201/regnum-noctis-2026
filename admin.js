@@ -1,5 +1,5 @@
-import { TEAMS, sortedGames, formatTime, BALLON_GAME, GAME_STATUSES, buildBallonGame, hasGameResult } from "./data.js?v=ballon-1";
-import { getStore } from "./store.js?v=ballon-1";
+import { TEAMS, sortedGames, formatTime, BALLON_GAME, GAME_STATUSES, buildBallonGame, hasGameResult } from "./data.js?v=games-2";
+import { getStore } from "./store.js?v=games-2";
 import { HUNT_DURATION_MINUTES } from "./hunt-data.js";
 
 const $ = selector => document.querySelector(selector);
@@ -8,7 +8,7 @@ let currentState = null, editingId = null, oracleQuestions = {}, oracleQuestions
 const ADMIN_PASS_HASH = "a80ff0faa95c643a50fbb4252140f964cf050b07a179843c9baa7a2783559da4";
 let ballonDirty = false, ballonSignature = null;
 
-$("#ballonRankInputs").innerHTML = TEAMS.map((_, index) => `<label><span>Platz ${index + 1} <small>+${5 - index} Punkte</small></span><select id="ballon-rank-${index}" required><option value="">Reich wählen …</option>${TEAMS.map(team => `<option value="${team.id}">${team.name}</option>`).join("")}</select></label>`).join("");
+$("#ballonRankInputs").innerHTML = TEAMS.map((_, index) => `<label><span>Platz ${index + 1} <small>+${5 - index} Punkte</small></span><select id="ballon-rank-${index}" required><option value="">Reich wählen …</option>${TEAMS.map(team => `<option value="${team.id}">${team.name} ${team.marker}</option>`).join("")}</select></label>`).join("");
 $("#ballonForm").addEventListener("change", () => { ballonDirty = true; updateBallonForm(); });
 $("#startBallon").addEventListener("click", () => saveBallonStatus("running"));
 $("#resetBallon").addEventListener("click", () => {
