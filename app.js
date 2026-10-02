@@ -108,16 +108,11 @@ function render(state) {
 
 function renderBallonGame(game) {
   const status = game?.status || "not-started";
+  const running = status === "running";
+  $("#ballonGameCard").classList.toggle("hidden", !running);
   $("#ballonGameStatus").textContent = GAME_STATUSES[status] || GAME_STATUSES["not-started"];
   $("#ballonGameCard").dataset.status = status;
   $("#ballonGameDescription").textContent = BALLON_GAME.description;
-  const completed = status === "completed";
-  $("#ballonGameResults").classList.toggle("hidden", !completed);
-  $("#ballonGameResults").innerHTML = completed ? (game.ranking || []).map((id, index) => {
-    const team = TEAMS.find(item => item.id === id);
-    if (!team) return "";
-    return `<li style="--team:${team.color}"><span class="ballon-place">${index + 1}.</span><img src="${team.logo}" alt=""><b>${team.name}</b><strong>+${Number(game.points?.[id] || 0)} <small>Punkte</small></strong></li>`;
-  }).join("") : "";
 }
 
 function pointChips(points = {}) { return TEAMS.filter(team => Number(points[team.id]) !== 0).map(team => `<span style="--team:${team.color}"><i></i>${team.name} <b>${Number(points[team.id]) > 0 ? "+" : ""}${Number(points[team.id])}</b></span>`).join("") || '<span class="muted">Keine Punkte</span>'; }

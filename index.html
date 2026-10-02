@@ -100,6 +100,15 @@
     </section>
 
     <div id="liveContent">
+      <section id="ballonGameCard" class="ballon-card hidden" aria-labelledby="ballonGameName" aria-live="polite">
+        <div class="hunt-topline"><span>Vormittag · ca. 15 Minuten</span><strong id="ballonGameStatus">Läuft</strong></div>
+        <div class="ballon-content">
+          <p class="eyebrow">Aktuelles Spiel</p><h2 id="ballonGameName">Ballon Game</h2>
+          <p id="ballonGameDescription"></p>
+          <p class="ballon-scoring">Platz 1–5: 5 / 4 / 3 / 2 / 1 Punkte</p>
+        </div>
+      </section>
+
       <section class="section-head">
         <div><p class="eyebrow">Machtverhältnisse</p><h2>Live-Rangliste</h2></div>
         <time id="updatedAt">Noch keine Resultate</time>
@@ -113,16 +122,6 @@
           <span id="latestTime"></span>
         </div>
         <div id="latestPoints" class="point-chips"></div>
-      </section>
-
-      <section id="ballonGameCard" class="ballon-card" aria-labelledby="ballonGameName" aria-live="polite">
-        <div class="hunt-topline"><span>Vormittag · ca. 15 Minuten</span><strong id="ballonGameStatus">Noch nicht gestartet</strong></div>
-        <div class="ballon-content">
-          <p class="eyebrow">Teamspiel</p><h2 id="ballonGameName">Ballon Game</h2>
-          <p id="ballonGameDescription"></p>
-          <p class="ballon-scoring">Platz 1–5: 5 / 4 / 3 / 2 / 1 Punkte</p>
-          <ol id="ballonGameResults" class="ballon-results hidden" aria-label="Rangfolge Ballon Game"></ol>
-        </div>
       </section>
 
       <section class="results-section">
