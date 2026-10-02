@@ -46,3 +46,21 @@ Der Workflow in `.github/workflows/pages.yml` veröffentlicht `main` automatisch
 - `admins/{uid}`: Freigabe für Schreibzugriff
 
 Die Gesamtpunkte werden aus allen Spielresultaten berechnet. Korrekturen wirken dadurch sofort und ohne separate Summenpflege.
+
+## Ballon Game
+
+Im Adminbereich im Abschnitt **Ballon Game** auf **Spiel starten** klicken.
+Anschliessend **Resultat eintragen** wählen, alle fünf Reiche genau einmal auf
+Platz 1–5 einordnen und speichern. Das Spiel wird damit beendet. Die Punkte
+5 / 4 / 3 / 2 / 1 werden automatisch vergeben. **Bearbeiten** in der Resultatliste
+führt zurück zu diesem Abschnitt. Erneutes Speichern ersetzt das Resultat;
+es addiert keinen zweiten Eintrag. **Zurücksetzen** entfernt Rangfolge und Spielpunkte.
+
+Das Spiel nutzt den bestehenden Pfad `games/ballon-game` mit `status`, `ranking`
+(Team-IDs von Platz 1 bis 5), `points`, `source: "placement"`, `round`,
+`description`, `durationMinutes` und Zeitstempeln. Vor dem ersten Speichern
+zeigt die öffentliche Seite automatisch **Noch nicht gestartet**. Die ca.
+15 Minuten sind eine Dauerangabe; der Status wird durch die Spielleitung gesteuert.
+Nur beendete Spiele mit Status werden gewertet. Bestehende Resultate ohne
+Status zählen unverändert. Die bisherigen Admin-Regeln für `games` und
+`settings` reichen aus; neue Firebase-Pfade oder Regeln sind nicht nötig.

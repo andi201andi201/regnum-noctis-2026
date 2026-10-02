@@ -1,4 +1,4 @@
-import { TEAMS, totalsFromGames, sortedGames, formatTime } from "./data.js";
+import { TEAMS, totalsFromGames, sortedGames, formatTime, BALLON_GAME, GAME_STATUSES, hasGameResult } from "./data.js";
 import { getStore } from "./store.js";
 import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js";
 
@@ -65,7 +65,7 @@ function setupOnboarding() {
 
 function render(state) {
   const mode = state.settings.mode || "live";
-  const games = sortedGames(state.games);
+  const games = sortedGames(state.games).filter(hasGameResult);
   const totals = totalsFromGames(state.games);
   const ranking = [...TEAMS].sort((a, b) => totals[b.id] - totals[a.id] || a.name.localeCompare(b.name));
   const leader = ranking[0];
@@ -77,6 +77,8 @@ function render(state) {
 
   if (mode === "final") renderWinner(leader, totals[leader.id]);
   if (mode !== "live") return;
+
+  renderBallonGame(state.games[BALLON_GAME.id]);
 
   $("#leaderboard").innerHTML = ranking.map((team, index) => `
     <li class="rank-card ${index === 0 && hasResults ? "leader" : ""}" style="--team:${team.color};--glow:${team.glow}">
@@ -102,6 +104,20 @@ function render(state) {
 
   if (hasResults && previousLeader && previousLeader !== leader.id) burstConfetti(leader.color);
   if (hasResults) { previousLeader = leader.id; sessionStorage.setItem("regnum-leader", leader.id); }
+}
+
+function renderBallonGame(game) {
+  const status = game?.status || "not-started";
+  $("#ballonGameStatus").textContent = GAME_STATUSES[status] || GAME_STATUSES["not-started"];
+  $("#ballonGameCard").dataset.status = status;
+  $("#ballonGameDescription").textContent = BALLON_GAME.description;
+  const completed = status === "completed";
+  $("#ballonGameResults").classList.toggle("hidden", !completed);
+  $("#ballonGameResults").innerHTML = completed ? (game.ranking || []).map((id, index) => {
+    const team = TEAMS.find(item => item.id === id);
+    if (!team) return "";
+    return `<li style="--team:${team.color}"><span class="ballon-place">${index + 1}.</span><img src="${team.logo}" alt=""><b>${team.name}</b><strong>+${Number(game.points?.[id] || 0)} <small>Punkte</small></strong></li>`;
+  }).join("") : "";
 }
 
 function pointChips(points = {}) { return TEAMS.filter(team => Number(points[team.id]) !== 0).map(team => `<span style="--team:${team.color}"><i></i>${team.name} <b>${Number(points[team.id]) > 0 ? "+" : ""}${Number(points[team.id])}</b></span>`).join("") || '<span class="muted">Keine Punkte</span>'; }

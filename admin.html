@@ -19,6 +19,19 @@
     <div id="adminContent" class="hidden">
       <section class="panel status-panel"><div><p class="eyebrow">Sichtbarkeit</p><h2>Modus steuern</h2></div><div class="segmented" role="group" aria-label="Anzeigemodus"><button data-mode="live">Live</button><button data-mode="frozen">Einfrieren</button><button data-mode="final">Finale</button></div><p class="mode-help" id="modeHelp"></p></section>
 
+      <section id="ballonAdminPanel" class="panel ballon-admin-panel">
+        <div class="panel-title"><div><p class="eyebrow">Vormittag · ca. 15 Minuten</p><h2>Ballon Game</h2></div><span id="ballonAdminStatus" class="save-message">Noch nicht gestartet</span></div>
+        <p class="save-message">Ballon ohne Hände durchs ganze Team transportieren. Bei Fallenlassen oder Platzen zurück an den Start.</p>
+        <div class="hunt-admin-actions"><button id="startBallon" class="primary-button" type="button">Spiel starten</button><button id="enterBallonResult" class="secondary-button" type="button">Resultat eintragen</button><button id="resetBallon" class="text-button hidden" type="button">Zurücksetzen</button></div>
+        <form id="ballonForm" class="hidden">
+          <input id="ballonStatus" type="hidden" value="completed">
+          <fieldset id="ballonPlacements" disabled><legend>Rangfolge · jedes Reich genau einmal</legend><div id="ballonRankInputs" class="ballon-rank-inputs"></div></fieldset>
+          <p class="save-message">Speichern beendet das Spiel und vergibt die Punkte automatisch. Korrekturen ersetzen das bisherige Resultat.</p>
+          <div class="hunt-admin-actions"><button id="saveBallon" class="primary-button" type="submit">Resultat speichern · Punkte vergeben</button><button id="cancelBallonEdit" class="secondary-button" type="button">Abbrechen</button></div>
+          <p id="ballonSaveMessage" class="form-error" role="status"></p>
+        </form>
+      </section>
+
       <section class="panel hunt-control-panel">
         <div><p class="eyebrow">Gemeinsames Kurzspiel</p><h2>Nachtjagd steuern</h2><p id="huntAdminStatus" class="save-message"></p></div>
         <div class="hunt-admin-actions"><button id="startTeamHunt" class="primary-button" type="button">12-Minuten-Jagd starten</button><button id="stopTeamHunt" class="secondary-button hidden" type="button">Jagd beenden</button></div>

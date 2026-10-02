@@ -43,7 +43,10 @@ function firebaseStore() {
     },
     async saveGame(game, id = null) {
       const gameRef = id ? firebase.ref(firebase.db, `games/${id}`) : firebase.push(firebase.ref(firebase.db, "games"));
-      await firebase.set(gameRef, game);
+      await firebase.update(firebase.ref(firebase.db), {
+        [`games/${gameRef.key}`]: game,
+        "settings/updatedAt": firebase.serverTimestamp()
+      });
     },
     async claimChallenge(challengeId, profile, points) {
       if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);

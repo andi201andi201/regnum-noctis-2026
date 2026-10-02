@@ -1,4 +1,4 @@
-import { TEAMS, sortedGames, formatTime } from "./data.js";
+import { TEAMS, sortedGames, formatTime, BALLON_GAME, GAME_STATUSES, buildBallonGame, hasGameResult } from "./data.js";
 import { getStore } from "./store.js";
 import { HUNT_DURATION_MINUTES } from "./hunt-data.js";
 
@@ -6,6 +6,32 @@ const $ = selector => document.querySelector(selector);
 const store = await getStore();
 let currentState = null, editingId = null, oracleQuestions = {}, oracleQuestionsUnsubscribe = null;
 const ADMIN_PASS_HASH = "a80ff0faa95c643a50fbb4252140f964cf050b07a179843c9baa7a2783559da4";
+let ballonDirty = false, ballonSignature = null;
+
+$("#ballonRankInputs").innerHTML = TEAMS.map((_, index) => `<label><span>Platz ${index + 1} <small>+${5 - index} Punkte</small></span><select id="ballon-rank-${index}" required><option value="">Reich wählen …</option>${TEAMS.map(team => `<option value="${team.id}">${team.name}</option>`).join("")}</select></label>`).join("");
+$("#ballonForm").addEventListener("change", () => { ballonDirty = true; updateBallonForm(); });
+$("#startBallon").addEventListener("click", () => saveBallonStatus("running"));
+$("#resetBallon").addEventListener("click", () => {
+  if (currentState.games[BALLON_GAME.id]?.status === "completed" && !confirm("Ballon Game zurücksetzen? Die Rangfolge und Punkte dieses Spiels werden entfernt.")) return;
+  saveBallonStatus("not-started");
+});
+$("#enterBallonResult").addEventListener("click", () => openBallonResult());
+$("#cancelBallonEdit").addEventListener("click", () => { ballonDirty = false; renderBallonAdmin(currentState, true); });
+$("#ballonForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const button = $("#saveBallon");
+  button.disabled = true;
+  $("#ballonSaveMessage").textContent = "";
+  try {
+    const ranking = TEAMS.map((_, index) => $(`#ballon-rank-${index}`).value);
+    const game = buildBallonGame($("#ballonStatus").value, ranking, currentState.games[BALLON_GAME.id]);
+    await store.saveGame(game, BALLON_GAME.id);
+    ballonDirty = false;
+    renderBallonAdmin({ games: { ...currentState.games, [BALLON_GAME.id]: game } }, true);
+    toast(game.status === "completed" ? "Ballon Game ausgewertet · Punkte aktualisiert" : "Spielstatus gespeichert");
+  } catch (error) { $("#ballonSaveMessage").textContent = error.message; }
+  finally { button.disabled = false; }
+});
 
 $("#scoreInputs").innerHTML = TEAMS.map(team => `<label class="score-field" style="--team:${team.color}"><span><i></i>${team.name}</span><input id="score-${team.id}" type="number" inputmode="numeric" value="0" step="1" required></label>`).join("");
 if (store.demo) setAccess(sessionStorage.getItem("regnum-admin-unlocked") === "true");
@@ -89,6 +115,7 @@ $("#adminResults").addEventListener("click", async event => {
 });
 
 function renderAdmin(state) {
+  renderBallonAdmin(state);
   const mode = state.settings.mode || "live";
   document.querySelectorAll("[data-mode]").forEach(button => button.classList.toggle("active", button.dataset.mode === mode));
   $("#modeHelp").textContent = { live: "Rangliste und Resultate sind für alle sichtbar.", frozen: "Publikum sieht keine Punkte – Admin bleibt bedienbar.", final: "Die Siegeransicht wird öffentlich angezeigt." }[mode];
@@ -108,9 +135,56 @@ function renderAdmin(state) {
     const answerCount = Object.keys(state.oracleAnswers?.[oracle.roundId] || {}).length;
     $("#oracleAdminStatus").textContent = `${answerCount} von 5 Reichen haben geantwortet · Ende ${formatTime(oracle.endsAt)}`;
   }
-  const games = sortedGames(state.games);
+  const games = sortedGames(state.games).filter(hasGameResult);
   $("#adminResults").innerHTML = games.map(game => `<article class="admin-result"><div><span>${formatTime(game.createdAt, true)}</span><strong>${escapeHtml(game.name)}</strong><small>${escapeHtml(game.round || game.resultText || "")}</small></div><div class="admin-actions"><button data-action="edit" data-id="${game.id}">Bearbeiten</button><button class="danger" data-action="delete" data-id="${game.id}">Löschen</button></div></article>`).join("");
   $("#adminEmpty").classList.toggle("hidden", games.length > 0);
+}
+
+function renderBallonAdmin(state, force = false) {
+  const game = state?.games?.[BALLON_GAME.id];
+  const status = game?.status || "not-started";
+  const signature = JSON.stringify(game || null);
+  $("#ballonAdminStatus").textContent = GAME_STATUSES[status];
+  $("#startBallon").classList.toggle("hidden", status !== "not-started");
+  $("#resetBallon").classList.toggle("hidden", status === "not-started");
+  $("#enterBallonResult").textContent = status === "completed" ? "Resultat korrigieren" : "Resultat eintragen";
+  if (!force && (ballonDirty || signature === ballonSignature)) return;
+  ballonSignature = signature;
+  $("#ballonStatus").value = "completed";
+  $("#ballonForm").classList.add("hidden");
+  TEAMS.forEach((_, index) => { $(`#ballon-rank-${index}`).value = game?.ranking?.[index] || ""; });
+  $("#ballonSaveMessage").textContent = "";
+  updateBallonForm();
+}
+
+function openBallonResult() {
+  $("#ballonForm").classList.remove("hidden");
+  ballonDirty = true;
+  updateBallonForm();
+  $("#ballon-rank-0").focus();
+}
+
+async function saveBallonStatus(status) {
+  const controls = [$("#startBallon"), $("#resetBallon"), $("#enterBallonResult")];
+  controls.forEach(button => { button.disabled = true; });
+  try {
+    const game = buildBallonGame(status, [], currentState.games[BALLON_GAME.id]);
+    await store.saveGame(game, BALLON_GAME.id);
+    ballonDirty = false;
+    renderBallonAdmin({ games: { ...currentState.games, [BALLON_GAME.id]: game } }, true);
+    toast(status === "running" ? "Ballon Game läuft" : "Ballon Game zurückgesetzt");
+  } catch (error) { toast(`Speichern fehlgeschlagen: ${error.message}`); }
+  finally { controls.forEach(button => { button.disabled = false; }); }
+}
+
+function updateBallonForm() {
+  const completed = $("#ballonStatus").value === "completed";
+  $("#ballonPlacements").disabled = !completed;
+  $("#saveBallon").textContent = completed ? "Resultat speichern · Punkte vergeben" : "Status speichern";
+  const chosen = TEAMS.map((_, index) => $(`#ballon-rank-${index}`).value).filter(Boolean);
+  const duplicate = new Set(chosen).size !== chosen.length;
+  $("#ballonSaveMessage").textContent = completed && duplicate ? "Jedes Reich darf nur einmal vorkommen." : "";
+  TEAMS.forEach((_, index) => $(`#ballon-rank-${index}`).setCustomValidity(completed && duplicate ? "Jedes Reich darf nur einmal vorkommen." : ""));
 }
 
 function renderOracleQuestions() {
@@ -124,7 +198,7 @@ function renderOracleQuestions() {
 function loadOracleEditor(id, question) { $("#oracleQuestionId").value = id; $("#oracleAdminQuestion").value = question.question || ""; $("#oracleAdminAnswer").value = question.answer; $("#oracleAdminUnit").value = question.unit || ""; $("#oracleAdminMinutes").value = question.minutes || 3; $("#oracleAdminPoints").value = question.maxPoints || 5; $("#saveOracleQuestion").textContent = "Änderungen speichern"; $("#cancelOracleEdit").classList.remove("hidden"); $("#oracleAdminForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
 function resetOracleEditor() { $("#oracleAdminForm").reset(); $("#oracleQuestionId").value = ""; $("#oracleAdminMinutes").value = 3; $("#oracleAdminPoints").value = 5; $("#saveOracleQuestion").textContent = "Frage speichern"; $("#cancelOracleEdit").classList.add("hidden"); }
 
-function loadEdit(id) { const game = currentState.games[id]; if (!game) return; editingId = id; $("#formTitle").textContent = "Resultat korrigieren"; $("#cancelEdit").classList.remove("hidden"); $("#gameName").value = game.name || ""; $("#roundName").value = game.round || ""; $("#resultText").value = game.resultText || ""; TEAMS.forEach(team => $(`#score-${team.id}`).value = Number(game.points?.[team.id] || 0)); $("#resultForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
+function loadEdit(id) { if (id === BALLON_GAME.id) { ballonDirty = false; renderBallonAdmin(currentState, true); openBallonResult(); $("#ballonAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } const game = currentState.games[id]; if (!game) return; editingId = id; $("#formTitle").textContent = "Resultat korrigieren"; $("#cancelEdit").classList.remove("hidden"); $("#gameName").value = game.name || ""; $("#roundName").value = game.round || ""; $("#resultText").value = game.resultText || ""; TEAMS.forEach(team => $(`#score-${team.id}`).value = Number(game.points?.[team.id] || 0)); $("#resultForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
 function resetForm() { editingId = null; $("#resultForm").reset(); TEAMS.forEach(team => $(`#score-${team.id}`).value = 0); $("#formTitle").textContent = "Spielresultat erfassen"; $("#cancelEdit").classList.add("hidden"); $("#saveMessage").textContent = ""; }
 function toast(message) { $("#toast").textContent = message; $("#toast").classList.add("show"); setTimeout(() => $("#toast").classList.remove("show"), 2200); }
 function setAccess(granted) {
