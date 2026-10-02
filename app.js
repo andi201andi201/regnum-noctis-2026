@@ -1,5 +1,5 @@
-import { TEAMS, totalsFromGames, sortedGames, formatTime, BALLON_GAME, GAME_STATUSES, hasGameResult } from "./data.js";
-import { getStore } from "./store.js";
+import { TEAMS, totalsFromGames, sortedGames, formatTime, BALLON_GAME, GAME_STATUSES, hasGameResult } from "./data.js?v=ballon-1";
+import { getStore } from "./store.js?v=ballon-1";
 import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js";
 
 const $ = selector => document.querySelector(selector);

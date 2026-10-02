@@ -1,5 +1,5 @@
-import { TEAMS } from "./data.js";
-import { getStore } from "./store.js";
+import { TEAMS } from "./data.js?v=ballon-1";
+import { getStore } from "./store.js?v=ballon-1";
 import { getPlayerProfile } from "./player.js";
 import { HUNT_POINTS_PER_OBJECT, HUNT_TARGETS } from "./hunt-data.js";
 
@@ -151,3 +151,4 @@ function continueHunt() { $("#huntSuccess").classList.add("hidden"); $("#huntInt
 function stopCameraOnly() { if (animationFrame) cancelAnimationFrame(animationFrame); animationFrame = null; stream?.getTracks().forEach(track => track.stop()); stream = null; $("#huntVideo").srcObject = null; clearCanvas(); }
 function clearCanvas() { const canvas = $("#huntOverlay"); canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height); }
 function setStatus(message, isError = false) { $("#huntStatus").textContent = message; $("#huntStatus").classList.toggle("error", isError); }
+

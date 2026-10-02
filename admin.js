@@ -1,5 +1,5 @@
-import { TEAMS, sortedGames, formatTime, BALLON_GAME, GAME_STATUSES, buildBallonGame, hasGameResult } from "./data.js";
-import { getStore } from "./store.js";
+import { TEAMS, sortedGames, formatTime, BALLON_GAME, GAME_STATUSES, buildBallonGame, hasGameResult } from "./data.js?v=ballon-1";
+import { getStore } from "./store.js?v=ballon-1";
 import { HUNT_DURATION_MINUTES } from "./hunt-data.js";
 
 const $ = selector => document.querySelector(selector);

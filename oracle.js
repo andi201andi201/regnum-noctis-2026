@@ -1,6 +1,6 @@
-import { TEAMS } from "./data.js";
+import { TEAMS } from "./data.js?v=ballon-1";
 import { getPlayerProfile } from "./player.js";
-import { getStore } from "./store.js";
+import { getStore } from "./store.js?v=ballon-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -59,3 +59,4 @@ async function submitAnswer(event) {
     $("#oracleSealed").classList.remove("hidden");
   }
 }
+
