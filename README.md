@@ -42,6 +42,8 @@ Der Workflow in `.github/workflows/pages.yml` veröffentlicht `main` automatisch
 ## Datenmodell
 
 - `games/{id}`: Spielname, Runde, Kurzresultat, Punkte aller fünf Reiche, Zeitstempel
+- `songBattleAnswers/{teamId}/song-{nr}`: laufende Teamantworten; in der Teilnehmeransicht wird nur das eigene Reich abonniert
+- `songBattleAdmin`: geschützte manuelle Bewertungen und interne Song-Battle-Punkte
 - `settings/mode`: `live`, `frozen` oder `final`
 - `admins/{uid}`: Freigabe für Schreibzugriff
 
@@ -64,3 +66,18 @@ zeigt die öffentliche Seite automatisch **Noch nicht gestartet**. Die ca.
 Nur beendete Spiele mit Status werden gewertet. Bestehende Resultate ohne
 Status zählen unverändert. Die bisherigen Admin-Regeln für `games` und
 `settings` reichen aus; neue Firebase-Pfade oder Regeln sind nicht nötig.
+
+## Song Battle
+
+Das Song Battle läuft als festes Spiel unter `games/song-battle`. Der Admin
+startet das Spiel, öffnet oder sperrt pro Song die Antworten und wechselt durch
+sechs Runden. Teams können Titel und Interpret bis zur Sperre beliebig
+korrigieren; mindestens eines der beiden Felder muss ausgefüllt sein. Die
+Spielleitung bewertet beide Angaben je Reich bewusst manuell mit ✓ oder ✗.
+
+Nach Song 6 werden die internen Punkte (maximal 12) sortiert. Bei Gleichstand
+zeigt der Adminbereich die Stechen-Warnung und lässt nur die punktgleichen
+Positionen manuell umordnen. Das abschliessende Speichern schreibt genau einen
+Resultateintrag mit 5 / 4 / 3 / 2 / 1 Gesamtpunkten. Korrekturen überschreiben
+dieses Resultat und können deshalb keine Punkte doppelt addieren. Laufende
+Antworten und Bewertungen bleiben bis zu einem bewussten Zurücksetzen erhalten.

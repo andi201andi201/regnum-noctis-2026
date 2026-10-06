@@ -1,19 +1,42 @@
-import { TEAMS, totalsFromGames, sortedGames, formatTime, BALLON_GAME, GAME_STATUSES, hasGameResult } from "./data.js?v=games-2";
-import { getStore } from "./store.js?v=games-2";
+import { TEAMS, totalsFromGames, sortedGames, formatTime, BALLON_GAME, SONG_BATTLE, GAME_STATUSES, hasGameResult } from "./data.js?v=song-1";
+import { getStore } from "./store.js?v=song-1";
 import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
 let previousLeader = sessionStorage.getItem("regnum-leader"), currentState = null, victoryTimer = null;
+let songTeamId = null, songTeamUnsubscribe = null, songSubscriptionToken = 0, songOwnAnswers = {}, songDraftKey = null, songDraftDirty = false;
 
 store.subscribe(render);
 $("#connectionText").textContent = store.demo ? "Lokaler Demomodus" : "Live verbunden";
 document.body.classList.add("ready");
 setupOnboarding();
 window.addEventListener("regnum-player-changed", () => {
-  if (currentState?.settings?.mode === "live") maybeCelebrateGameWinner(currentState.games?.[BALLON_GAME.id], BALLON_GAME.id);
+  ensureSongTeamSubscription();
+  if (currentState?.settings?.mode === "live") {
+    maybeCelebrateGameWinner(currentState.games?.[BALLON_GAME.id], BALLON_GAME.id);
+    maybeCelebrateGameWinner(currentState.games?.[SONG_BATTLE.id], SONG_BATTLE.id);
+  }
 });
 $("#victoryCelebration").addEventListener("click", hideVictoryCelebration);
+$("#songBattleTitle").addEventListener("input", () => { songDraftDirty = true; });
+$("#songBattleArtist").addEventListener("input", () => { songDraftDirty = true; });
+$("#songBattleAnswerForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const profile = getPlayerProfile();
+  const game = currentState?.games?.[SONG_BATTLE.id];
+  if (!profile || game?.status !== "running" || !game.answersOpen) return;
+  const button = $("#saveSongBattleAnswer");
+  button.disabled = true;
+  $("#songBattleMessage").textContent = "";
+  try {
+    await store.submitSongBattleAnswer(game.currentSong, profile, $("#songBattleTitle").value, $("#songBattleArtist").value);
+    songDraftDirty = false;
+    $("#songBattleSaved").classList.remove("hidden");
+  } catch (error) {
+    $("#songBattleMessage").textContent = error.message === "song-battle-closed" ? "Die Antworten wurden inzwischen geschlossen." : error.message === "song-battle-empty" ? "Bitte mindestens Titel oder Interpret eintragen." : `Speichern fehlgeschlagen: ${error.message}`;
+  } finally { button.disabled = false; }
+});
 
 function setupOnboarding() {
   let selectedTeamId = null;
@@ -84,6 +107,7 @@ function render(state) {
   if (mode !== "live") return;
 
   renderBallonGame(state.games[BALLON_GAME.id]);
+  renderSongBattle(state.games[SONG_BATTLE.id]);
 
   $("#leaderboard").innerHTML = ranking.map((team, index) => `
     <li class="rank-card ${index === 0 && hasResults ? "leader" : ""}" style="--team:${team.color};--glow:${team.glow}">
@@ -104,7 +128,7 @@ function render(state) {
     $("#latestPoints").innerHTML = pointChips(latest.points);
   } else $("#latestCard").classList.add("hidden");
 
-  $("#resultsList").innerHTML = games.map(game => `<article class="result-row"><div class="result-title"><span>${formatTime(game.createdAt, true)}</span><strong>${escapeHtml(game.name)}</strong><small>${escapeHtml([game.round, game.resultText].filter(Boolean).join(" · "))}</small></div><div class="point-chips">${pointChips(game.points)}</div></article>`).join("");
+  $("#resultsList").innerHTML = games.map(renderGameResult).join("");
   $("#emptyResults").classList.toggle("hidden", hasResults);
 
   if (hasResults && previousLeader && previousLeader !== leader.id) burstConfetti(leader.color);
@@ -119,6 +143,60 @@ function renderBallonGame(game) {
   $("#ballonGameCard").dataset.status = status;
   $("#ballonGameDescription").textContent = BALLON_GAME.description;
   if (status === "completed") maybeCelebrateGameWinner(game, BALLON_GAME.id);
+}
+
+function renderSongBattle(game) {
+  const status = game?.status || "not-started";
+  const running = status === "running";
+  $("#songBattleCard").classList.toggle("hidden", !running);
+  if (status === "completed") maybeCelebrateGameWinner(game, SONG_BATTLE.id);
+  if (!running) return;
+  ensureSongTeamSubscription();
+  const songNumber = Number(game.currentSong) || 1;
+  const key = `song-${songNumber}`;
+  const answer = songOwnAnswers[key];
+  const open = !!game.answersOpen;
+  $("#songBattlePublicStatus").textContent = open ? "Antworten offen" : "Antworten geschlossen";
+  $("#songBattleRound").textContent = `🎵 Song ${songNumber} von ${SONG_BATTLE.songCount}`;
+  $("#songBattleAnswerForm").classList.toggle("hidden", !open);
+  $("#songBattleClosed").classList.toggle("hidden", open);
+  $("#songBattleSaved").classList.toggle("hidden", !answer);
+  $("#songBattleMessage").textContent = "";
+  if (songDraftKey !== key || !songDraftDirty) {
+    songDraftKey = key;
+    $("#songBattleTitle").value = answer?.title || "";
+    $("#songBattleArtist").value = answer?.artist || "";
+  }
+  $("#saveSongBattleAnswer").textContent = answer ? "Antwort aktualisieren" : "Antwort speichern";
+}
+
+async function ensureSongTeamSubscription() {
+  const teamId = getPlayerProfile()?.teamId || null;
+  if (!teamId || teamId === songTeamId) return;
+  songTeamUnsubscribe?.();
+  songTeamUnsubscribe = null;
+  songTeamId = teamId;
+  songOwnAnswers = {};
+  songDraftKey = null;
+  const token = ++songSubscriptionToken;
+  const stop = await store.subscribeSongBattleTeam(teamId, answers => {
+    if (token !== songSubscriptionToken) return;
+    songOwnAnswers = answers || {};
+    songDraftDirty = false;
+    if (currentState?.settings?.mode === "live") renderSongBattle(currentState.games?.[SONG_BATTLE.id]);
+  });
+  if (token !== songSubscriptionToken) stop?.();
+  else songTeamUnsubscribe = stop;
+}
+
+function renderGameResult(game) {
+  if (game.id === SONG_BATTLE.id && game.status === "completed") {
+    return `<article class="result-row song-public-result"><div class="result-title"><span>${formatTime(game.createdAt, true)}</span><strong>🎵 SONG BATTLE – RESULTAT</strong><ol>${(game.ranking || []).map((teamId, index) => {
+      const team = TEAMS.find(item => item.id === teamId);
+      return `<li style="--team:${team?.color || "#888"}"><b>${index + 1}. ${index === 0 ? "🏆 " : ""}${team?.marker || ""} ${escapeHtml(team?.name || teamId)}</b><span>${Number(game.internalPoints?.[teamId] || 0)}/12 · +${Number(game.points?.[teamId] || 0)}</span></li>`;
+    }).join("")}</ol></div></article>`;
+  }
+  return `<article class="result-row"><div class="result-title"><span>${formatTime(game.createdAt, true)}</span><strong>${escapeHtml(game.name)}</strong><small>${escapeHtml([game.round, game.resultText].filter(Boolean).join(" · "))}</small></div><div class="point-chips">${pointChips(game.points)}</div></article>`;
 }
 
 function maybeCelebrateGameWinner(game, gameId) {

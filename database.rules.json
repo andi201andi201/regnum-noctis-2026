@@ -18,6 +18,19 @@
         }
       }
     },
+    "songBattleAnswers": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      "$teamId": {
+        ".read": "auth != null",
+        "$songId": {
+          ".write": "auth != null && root.child('settings').child('mode').val() === 'live' && root.child('games/song-battle/status').val() === 'running' && root.child('games/song-battle/answersOpen').val() === true && newData.child('songNumber').val() === root.child('games/song-battle/currentSong').val() && ($teamId === 'draco' || $teamId === 'serpens' || $teamId === 'lupus' || $teamId === 'corvus' || $teamId === 'noctua') && $songId === 'song-' + newData.child('songNumber').val() && newData.child('title').isString() && newData.child('title').val().length <= 120 && newData.child('artist').isString() && newData.child('artist').val().length <= 120 && (newData.child('title').val().length > 0 || newData.child('artist').val().length > 0) && newData.child('playerName').isString() && newData.child('playerName').val().length > 0 && newData.child('playerName').val().length <= 32 && newData.child('claimantId').val() === auth.uid"
+        }
+      }
+    },
+    "songBattleAdmin": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+    },
     "oracleSecrets": {
       ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
       ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"

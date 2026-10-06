@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=games-2">
+  <link rel="stylesheet" href="styles.css?v=song-1">
 </head>
 <body>
   <div class="stars" aria-hidden="true"></div>
@@ -109,6 +109,24 @@
         </div>
       </section>
 
+      <section id="songBattleCard" class="song-battle-card hidden" aria-labelledby="songBattleName" aria-live="polite">
+        <div class="hunt-topline"><span>Vormittag · ca. 15 Minuten</span><strong id="songBattlePublicStatus">Läuft</strong></div>
+        <div class="song-battle-content">
+          <p class="eyebrow">Aktuelles Spiel</p><h2 id="songBattleName">🎵 Song Battle</h2>
+          <div id="songBattleRoundView">
+            <div class="song-round-badge" id="songBattleRound">Song 1 von 6</div>
+            <form id="songBattleAnswerForm">
+              <label>Titel<input id="songBattleTitle" type="text" maxlength="120" autocomplete="off" placeholder="Songtitel eingeben"></label>
+              <label>Interpret<input id="songBattleArtist" type="text" maxlength="120" autocomplete="off" placeholder="Interpret eingeben"></label>
+              <button id="saveSongBattleAnswer" class="primary-button" type="submit">Antwort speichern</button>
+            </form>
+            <div id="songBattleSaved" class="song-answer-saved hidden">✓ Antwort gespeichert <small>Änderungen sind möglich, solange die Runde offen ist.</small></div>
+            <div id="songBattleClosed" class="song-answer-closed hidden">🔒 Antworten geschlossen</div>
+            <p id="songBattleMessage" class="form-error" role="status"></p>
+          </div>
+        </div>
+      </section>
+
       <section class="section-head">
         <div><p class="eyebrow">Machtverhältnisse</p><h2>Live-Rangliste</h2></div>
         <time id="updatedAt">Noch keine Resultate</time>
@@ -144,8 +162,8 @@
     </div>
   </section>
   <canvas id="confetti" aria-hidden="true"></canvas>
-  <script type="module" src="app.js?v=games-2"></script>
-  <script type="module" src="hunt.js?v=games-2"></script>
-  <script type="module" src="oracle.js?v=games-2"></script>
+  <script type="module" src="app.js?v=song-1"></script>
+  <script type="module" src="hunt.js?v=song-1"></script>
+  <script type="module" src="oracle.js?v=song-1"></script>
 </body>
 </html>

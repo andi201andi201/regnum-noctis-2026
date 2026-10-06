@@ -5,7 +5,7 @@
   <meta name="theme-color" content="#08090d"><title>Admin · Regnum Noctis</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=games-2">
+  <link rel="stylesheet" href="styles.css?v=song-1">
 </head>
 <body class="admin-page">
   <div class="stars" aria-hidden="true"></div>
@@ -30,6 +30,33 @@
           <div class="hunt-admin-actions"><button id="saveBallon" class="primary-button" type="submit">Resultat speichern · Punkte vergeben</button><button id="cancelBallonEdit" class="secondary-button" type="button">Abbrechen</button></div>
           <p id="ballonSaveMessage" class="form-error" role="status"></p>
         </form>
+      </section>
+
+      <section id="songBattleAdminPanel" class="panel song-admin-panel">
+        <div class="panel-title"><div><p class="eyebrow">Vormittag · ca. 15 Minuten</p><h2>🎵 Song Battle</h2></div><span id="songBattleAdminStatus" class="save-message">Noch nicht gestartet</span></div>
+        <p class="save-message">6 Songs · Titel und Interpret werden einzeln manuell bewertet.</p>
+        <div id="songBattleStartActions" class="hunt-admin-actions"><button id="startSongBattle" class="primary-button" type="button">Song Battle starten</button><button id="resetSongBattle" class="text-button hidden" type="button">Zurücksetzen</button></div>
+
+        <div id="songBattleControls" class="song-admin-controls hidden">
+          <div class="song-round-control">
+            <label>Song auswählen<select id="songRoundSelect"></select></label>
+            <button id="activateSongRound" class="secondary-button" type="button">Ausgewählten Song starten</button>
+            <button id="nextSongRound" class="secondary-button" type="button">Nächsten Song starten</button>
+          </div>
+          <div id="songAnswerControls" class="hunt-admin-actions"><button id="openSongAnswers" class="primary-button" type="button">Antworten öffnen</button><button id="closeSongAnswers" class="secondary-button" type="button">Antworten sperren</button></div>
+          <p id="songRoundStatus" class="save-message"></p>
+
+          <div class="song-admin-heading"><div><p class="eyebrow" id="songAdminRoundTitle">Song 1 von 6</p><h3>Antworten der Reiche</h3></div><strong id="songSubmissionCount">0 / 5 abgegeben</strong></div>
+          <div id="songTeamAnswers" class="song-team-answers"></div>
+
+          <div id="songFinalisation" class="song-finalisation hidden">
+            <div id="songTieWarning" class="song-tie-warning hidden">⚠️ Gleichstand – Stechen erforderlich</div>
+            <p id="songFinalHelp" class="save-message"></p>
+            <div id="songFinalRanking" class="song-final-ranking"></div>
+            <button id="finishSongBattle" class="primary-button" type="button">Endrangfolge speichern · Punkte vergeben</button>
+            <p id="songFinishMessage" class="form-error" role="status"></p>
+          </div>
+        </div>
       </section>
 
       <section class="panel hunt-control-panel">
@@ -67,6 +94,6 @@
     </div>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="admin.js?v=games-2"></script>
+  <script type="module" src="admin.js?v=song-1"></script>
 </body>
 </html>

@@ -1,10 +1,12 @@
-import { TEAMS, sortedGames, formatTime, BALLON_GAME, GAME_STATUSES, buildBallonGame, hasGameResult } from "./data.js?v=games-2";
-import { getStore } from "./store.js?v=games-2";
+import { TEAMS, sortedGames, formatTime, BALLON_GAME, SONG_BATTLE, GAME_STATUSES, buildBallonGame, hasGameResult, songBattleScores, songBattleTieGroups, suggestedSongBattleRanking } from "./data.js?v=song-1";
+import { getStore } from "./store.js?v=song-1";
 import { HUNT_DURATION_MINUTES } from "./hunt-data.js";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
 let currentState = null, editingId = null, oracleQuestions = {}, oracleQuestionsUnsubscribe = null;
+let songAnswers = {}, songAdmin = { evaluations: {}, internalPoints: {} }, songAnswersUnsubscribe = null, songAdminUnsubscribe = null;
+let songReviewNumber = 1, songRankingDirty = false, songRankingSignature = null;
 const ADMIN_PASS_HASH = "a80ff0faa95c643a50fbb4252140f964cf050b07a179843c9baa7a2783559da4";
 let ballonDirty = false, ballonSignature = null;
 
@@ -30,6 +32,51 @@ $("#ballonForm").addEventListener("submit", async event => {
     renderBallonAdmin({ games: { ...currentState.games, [BALLON_GAME.id]: game } }, true);
     toast(game.status === "completed" ? "Ballon Game ausgewertet · Punkte aktualisiert" : "Spielstatus gespeichert");
   } catch (error) { $("#ballonSaveMessage").textContent = error.message; }
+  finally { button.disabled = false; }
+});
+
+$("#songRoundSelect").innerHTML = Array.from({ length: SONG_BATTLE.songCount }, (_, index) => `<option value="${index + 1}">Song ${index + 1} von ${SONG_BATTLE.songCount}</option>`).join("");
+$("#startSongBattle").addEventListener("click", async () => {
+  if (!confirm("Song Battle jetzt mit Song 1 starten und Antworten öffnen?")) return;
+  await withDisabled($("#startSongBattle"), async () => { await store.startSongBattle(); toast("Song Battle läuft · Song 1 ist offen"); });
+});
+$("#resetSongBattle").addEventListener("click", async () => {
+  if (!confirm("Song Battle vollständig zurücksetzen? Antworten, Bewertungen und Gesamtpunkte dieses Spiels werden entfernt.")) return;
+  await withDisabled($("#resetSongBattle"), async () => { await store.resetSongBattle(); songReviewNumber = 1; toast("Song Battle zurückgesetzt"); });
+});
+$("#activateSongRound").addEventListener("click", () => activateSongRound(Number($("#songRoundSelect").value)));
+$("#nextSongRound").addEventListener("click", () => {
+  const current = Number(currentState?.games?.[SONG_BATTLE.id]?.currentSong || 1);
+  if (current >= SONG_BATTLE.songCount) return;
+  activateSongRound(current + 1);
+});
+$("#songRoundSelect").addEventListener("change", event => {
+  songReviewNumber = Number(event.target.value);
+  if (currentState?.games?.[SONG_BATTLE.id]?.status === "completed") renderSongBattleAdmin(currentState);
+});
+$("#openSongAnswers").addEventListener("click", async () => { await store.setSongBattleAnswersOpen(true); toast(`Song ${currentState.games[SONG_BATTLE.id].currentSong}: Antworten offen`); });
+$("#closeSongAnswers").addEventListener("click", async () => { await store.setSongBattleAnswersOpen(false); toast(`Song ${currentState.games[SONG_BATTLE.id].currentSong}: Antworten gesperrt`); });
+$("#songTeamAnswers").addEventListener("click", async event => {
+  const button = event.target.closest("button[data-song-eval]");
+  if (!button) return;
+  button.disabled = true;
+  try {
+    await store.saveSongBattleEvaluation(songReviewNumber, button.dataset.team, button.dataset.songEval, button.dataset.value === "true");
+  } catch (error) { toast(`Bewertung fehlgeschlagen: ${error.message}`); }
+  finally { button.disabled = false; }
+});
+$("#songFinalRanking").addEventListener("change", () => { songRankingDirty = true; validateSongFinalRanking(); });
+$("#finishSongBattle").addEventListener("click", async () => {
+  const button = $("#finishSongBattle");
+  $("#songFinishMessage").textContent = "";
+  try {
+    const ranking = TEAMS.map((_, index) => $(`#song-final-${index}`).value);
+    if (!validateSongFinalRanking(true)) return;
+    button.disabled = true;
+    await store.finishSongBattle(ranking);
+    songRankingDirty = false;
+    toast("Song Battle abgeschlossen · Gesamtpunkte aktualisiert");
+  } catch (error) { $("#songFinishMessage").textContent = error.message; }
   finally { button.disabled = false; }
 });
 
@@ -116,6 +163,7 @@ $("#adminResults").addEventListener("click", async event => {
 
 function renderAdmin(state) {
   renderBallonAdmin(state);
+  renderSongBattleAdmin(state);
   const mode = state.settings.mode || "live";
   document.querySelectorAll("[data-mode]").forEach(button => button.classList.toggle("active", button.dataset.mode === mode));
   $("#modeHelp").textContent = { live: "Rangliste und Resultate sind für alle sichtbar.", frozen: "Publikum sieht keine Punkte – Admin bleibt bedienbar.", final: "Die Siegeransicht wird öffentlich angezeigt." }[mode];
@@ -164,6 +212,111 @@ function openBallonResult() {
   $("#ballon-rank-0").focus();
 }
 
+async function activateSongRound(songNumber) {
+  const game = currentState?.games?.[SONG_BATTLE.id];
+  if (game?.status !== "running") return;
+  const wording = songNumber === Number(game.currentSong) ? `Song ${songNumber} erneut öffnen?` : `Song ${songNumber} starten und Antworten öffnen?`;
+  if (!confirm(wording)) return;
+  await store.setSongBattleRound(songNumber);
+  songReviewNumber = songNumber;
+  toast(`Song ${songNumber} läuft · Antworten offen`);
+}
+
+function renderSongBattleAdmin(state) {
+  const game = state?.games?.[SONG_BATTLE.id];
+  const status = game?.status || "not-started";
+  const running = status === "running";
+  const completed = status === "completed";
+  if (running) songReviewNumber = Number(game.currentSong) || 1;
+  songReviewNumber = Math.min(SONG_BATTLE.songCount, Math.max(1, songReviewNumber));
+
+  $("#songBattleAdminStatus").textContent = GAME_STATUSES[status] || GAME_STATUSES["not-started"];
+  $("#startSongBattle").classList.toggle("hidden", status !== "not-started");
+  $("#resetSongBattle").classList.toggle("hidden", status === "not-started");
+  $("#songBattleControls").classList.toggle("hidden", status === "not-started");
+  if (status === "not-started") return;
+
+  $("#songRoundSelect").value = String(songReviewNumber);
+  $("#activateSongRound").classList.toggle("hidden", !running);
+  $("#nextSongRound").classList.toggle("hidden", !running || Number(game.currentSong) >= SONG_BATTLE.songCount);
+  $("#songAnswerControls").classList.toggle("hidden", !running);
+  $("#openSongAnswers").classList.toggle("hidden", !running || game.answersOpen);
+  $("#closeSongAnswers").classList.toggle("hidden", !running || !game.answersOpen);
+  $("#songRoundStatus").textContent = completed
+    ? "Abgeschlossen · Antworten und Bewertungen können weiterhin kontrolliert werden. Zum Übernehmen einer Korrektur Resultat erneut speichern."
+    : `Aktuell auf den Handys: Song ${game.currentSong} von ${SONG_BATTLE.songCount} · Antworten ${game.answersOpen ? "offen" : "geschlossen"}`;
+  $("#songAdminRoundTitle").textContent = `Song ${songReviewNumber} von ${SONG_BATTLE.songCount}`;
+
+  const songKey = `song-${songReviewNumber}`;
+  const submissions = TEAMS.filter(team => songAnswers?.[team.id]?.[songKey]).length;
+  $("#songSubmissionCount").textContent = `${submissions} / ${TEAMS.length} abgegeben`;
+  $("#songTeamAnswers").innerHTML = TEAMS.map(team => {
+    const answer = songAnswers?.[team.id]?.[songKey];
+    const evaluation = songAdmin.evaluations?.[songKey]?.[team.id] || {};
+    return `<article class="song-answer-card ${answer ? "submitted" : "missing"}" style="--team:${team.color}">
+      <div class="song-answer-team"><span>${team.marker}</span><div><strong>${team.name.toUpperCase()}</strong><small>${answer ? "✓ abgegeben" : "Noch keine Abgabe"}</small></div></div>
+      <div class="song-answer-copy"><span>Titel</span><b>${escapeHtml(answer?.title || "–")}</b></div>
+      <div class="song-evaluation">${evaluationButtons(team.id, "title", evaluation.title, !!answer)}</div>
+      <div class="song-answer-copy"><span>Interpret</span><b>${escapeHtml(answer?.artist || "–")}</b></div>
+      <div class="song-evaluation">${evaluationButtons(team.id, "artist", evaluation.artist, !!answer)}</div>
+    </article>`;
+  }).join("");
+
+  const readyForFinal = (Number(game.currentSong) === SONG_BATTLE.songCount || completed) && (!game.answersOpen || completed);
+  $("#songFinalisation").classList.toggle("hidden", !readyForFinal);
+  if (readyForFinal) renderSongFinalisation(game);
+}
+
+function evaluationButtons(teamId, field, current, enabled) {
+  return `<span>${field === "title" ? "Titel" : "Interpret"}</span><button type="button" data-song-eval="${field}" data-team="${teamId}" data-value="true" class="${current === true ? "correct active" : "correct"}" ${enabled ? "" : "disabled"}>✓</button><button type="button" data-song-eval="${field}" data-team="${teamId}" data-value="false" class="${current === false ? "wrong active" : "wrong"}" ${enabled ? "" : "disabled"}>✗</button>`;
+}
+
+function renderSongFinalisation(game) {
+  const scores = songBattleScores(songAdmin.evaluations);
+  const ties = songBattleTieGroups(scores);
+  const incomplete = TEAMS.some(team => Array.from({ length: SONG_BATTLE.songCount }, (_, index) => {
+    const key = `song-${index + 1}`;
+    const answer = songAnswers?.[team.id]?.[key];
+    const evaluation = songAdmin.evaluations?.[key]?.[team.id];
+    return answer && (typeof evaluation?.title !== "boolean" || typeof evaluation?.artist !== "boolean");
+  }).some(Boolean));
+  $("#songTieWarning").classList.toggle("hidden", ties.length === 0);
+  $("#songFinalHelp").textContent = incomplete
+    ? "Bitte zuerst alle eingegangenen Antworten vollständig mit ✓ oder ✗ bewerten."
+    : ties.length ? "Nur bei gleicher interner Punktzahl darf die Reihenfolge durch das Stechen geändert werden." : "Kein Gleichstand: Die Rangfolge ergibt sich automatisch aus den internen Punkten.";
+  $("#finishSongBattle").disabled = incomplete;
+
+  const suggested = suggestedSongBattleRanking(scores, game.ranking || []);
+  const signature = JSON.stringify({ scores, ranking: game.ranking || [] });
+  if (!songRankingDirty || signature !== songRankingSignature) {
+    songRankingSignature = signature;
+    songRankingDirty = false;
+    const tiedIds = new Set(ties.flatMap(group => group.teamIds));
+    $("#songFinalRanking").innerHTML = suggested.map((teamId, index) => {
+      const score = scores[teamId];
+      const selectable = tiedIds.has(teamId);
+      const options = suggested.filter(id => scores[id] === score).map(id => {
+        const team = TEAMS.find(item => item.id === id);
+        return `<option value="${id}" ${id === teamId ? "selected" : ""}>${team.name} ${team.marker}</option>`;
+      }).join("");
+      return `<label><span>Platz ${index + 1} <small>${score}/12 · +${TEAMS.length - index}</small></span><select id="song-final-${index}" ${selectable ? "" : "disabled"}>${options}</select></label>`;
+    }).join("");
+  }
+  $("#finishSongBattle").textContent = game.status === "completed" ? "Korrektur übernehmen · Punkte aktualisieren" : "Endrangfolge speichern · Punkte vergeben";
+  validateSongFinalRanking();
+}
+
+function validateSongFinalRanking(report = false) {
+  const selects = TEAMS.map((_, index) => $(`#song-final-${index}`)).filter(Boolean);
+  if (selects.length !== TEAMS.length) return false;
+  const ranking = selects.map(select => select.value);
+  const duplicate = new Set(ranking).size !== ranking.length;
+  selects.forEach(select => select.setCustomValidity?.(duplicate ? "Jedes Reich darf nur einmal vorkommen." : ""));
+  $("#songFinishMessage").textContent = duplicate ? "Jedes Reich darf nur einmal vorkommen. Bitte die Reihenfolge des Stechens korrigieren." : "";
+  if (report && duplicate) selects.find(select => !select.checkValidity?.())?.reportValidity?.();
+  return !duplicate;
+}
+
 async function saveBallonStatus(status) {
   const controls = [$("#startBallon"), $("#resetBallon"), $("#enterBallonResult")];
   controls.forEach(button => { button.disabled = true; });
@@ -198,13 +351,18 @@ function renderOracleQuestions() {
 function loadOracleEditor(id, question) { $("#oracleQuestionId").value = id; $("#oracleAdminQuestion").value = question.question || ""; $("#oracleAdminAnswer").value = question.answer; $("#oracleAdminUnit").value = question.unit || ""; $("#oracleAdminMinutes").value = question.minutes || 3; $("#oracleAdminPoints").value = question.maxPoints || 5; $("#saveOracleQuestion").textContent = "Änderungen speichern"; $("#cancelOracleEdit").classList.remove("hidden"); $("#oracleAdminForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
 function resetOracleEditor() { $("#oracleAdminForm").reset(); $("#oracleQuestionId").value = ""; $("#oracleAdminMinutes").value = 3; $("#oracleAdminPoints").value = 5; $("#saveOracleQuestion").textContent = "Frage speichern"; $("#cancelOracleEdit").classList.add("hidden"); }
 
-function loadEdit(id) { if (id === BALLON_GAME.id) { ballonDirty = false; renderBallonAdmin(currentState, true); openBallonResult(); $("#ballonAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } const game = currentState.games[id]; if (!game) return; editingId = id; $("#formTitle").textContent = "Resultat korrigieren"; $("#cancelEdit").classList.remove("hidden"); $("#gameName").value = game.name || ""; $("#roundName").value = game.round || ""; $("#resultText").value = game.resultText || ""; TEAMS.forEach(team => $(`#score-${team.id}`).value = Number(game.points?.[team.id] || 0)); $("#resultForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
+function loadEdit(id) { if (id === BALLON_GAME.id) { ballonDirty = false; renderBallonAdmin(currentState, true); openBallonResult(); $("#ballonAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === SONG_BATTLE.id) { songReviewNumber = 1; renderSongBattleAdmin(currentState); $("#songBattleAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } const game = currentState.games[id]; if (!game) return; editingId = id; $("#formTitle").textContent = "Resultat korrigieren"; $("#cancelEdit").classList.remove("hidden"); $("#gameName").value = game.name || ""; $("#roundName").value = game.round || ""; $("#resultText").value = game.resultText || ""; TEAMS.forEach(team => $(`#score-${team.id}`).value = Number(game.points?.[team.id] || 0)); $("#resultForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
 function resetForm() { editingId = null; $("#resultForm").reset(); TEAMS.forEach(team => $(`#score-${team.id}`).value = 0); $("#formTitle").textContent = "Spielresultat erfassen"; $("#cancelEdit").classList.add("hidden"); $("#saveMessage").textContent = ""; }
 function toast(message) { $("#toast").textContent = message; $("#toast").classList.add("show"); setTimeout(() => $("#toast").classList.remove("show"), 2200); }
+async function withDisabled(button, action) { button.disabled = true; try { await action(); } catch (error) { toast(`Speichern fehlgeschlagen: ${error.message}`); } finally { button.disabled = false; } }
 function setAccess(granted) {
   $("#loginPanel").classList.toggle("hidden", granted); $("#adminContent").classList.toggle("hidden", !granted); $("#logoutBtn").classList.toggle("hidden", !granted);
   if (granted && !oracleQuestionsUnsubscribe) oracleQuestionsUnsubscribe = store.subscribeOracleQuestions(questions => { oracleQuestions = questions; renderOracleQuestions(); });
+  if (granted && !songAnswersUnsubscribe) songAnswersUnsubscribe = store.subscribeSongBattleAnswers(answers => { songAnswers = answers; if (currentState) renderSongBattleAdmin(currentState); });
+  if (granted && !songAdminUnsubscribe) songAdminUnsubscribe = store.subscribeSongBattleAdmin(value => { songAdmin = value; if (currentState) renderSongBattleAdmin(currentState); });
   if (!granted && oracleQuestionsUnsubscribe) { oracleQuestionsUnsubscribe(); oracleQuestionsUnsubscribe = null; oracleQuestions = {}; }
+  if (!granted && songAnswersUnsubscribe) { songAnswersUnsubscribe(); songAnswersUnsubscribe = null; songAnswers = {}; }
+  if (!granted && songAdminUnsubscribe) { songAdminUnsubscribe(); songAdminUnsubscribe = null; songAdmin = { evaluations: {}, internalPoints: {} }; }
 }
 async function sha256(value) { const bytes = new TextEncoder().encode(value); const hash = await crypto.subtle.digest("SHA-256", bytes); return [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, "0")).join(""); }
 function humanAuthError(code) { return ({ "auth/invalid-credential": "E-Mail oder Passwort ist falsch.", "auth/too-many-requests": "Zu viele Versuche. Bitte kurz warten.", "auth/network-request-failed": "Keine Verbindung. Bitte Internet prüfen." })[code] || "Login fehlgeschlagen."; }

@@ -1,5 +1,5 @@
 import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
-import { EMPTY_STATE, TEAMS } from "./data.js?v=games-2";
+import { EMPTY_STATE, TEAMS, SONG_BATTLE, buildSongBattle, songBattleScores, finalizeSongBattle } from "./data.js?v=song-1";
 
 const STORAGE_KEY = "regnum-noctis-demo";
 let firebase = null;
@@ -34,6 +34,12 @@ function firebaseStore() {
       return () => stops.forEach(stop => stop());
     },
     subscribeOracleQuestions(callback) { return firebase.onValue(firebase.ref(firebase.db, "oracleQuestions"), snapshot => callback(snapshot.val() || {})); },
+    subscribeSongBattleAnswers(callback) { return firebase.onValue(firebase.ref(firebase.db, "songBattleAnswers"), snapshot => callback(snapshot.val() || {})); },
+    subscribeSongBattleAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "songBattleAdmin"), snapshot => callback(normaliseSongBattleAdmin(snapshot.val()))); },
+    async subscribeSongBattleTeam(teamId, callback) {
+      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      return firebase.onValue(firebase.ref(firebase.db, `songBattleAnswers/${teamId}`), snapshot => callback(snapshot.val() || {}));
+    },
     async saveOracleQuestion(question, id = null) { const questionRef = id ? firebase.ref(firebase.db, `oracleQuestions/${id}`) : firebase.push(firebase.ref(firebase.db, "oracleQuestions")); await firebase.set(questionRef, { ...question, updatedAt: Date.now() }); },
     deleteOracleQuestion(id) { return firebase.remove(firebase.ref(firebase.db, `oracleQuestions/${id}`)); },
     auth: {
@@ -45,6 +51,58 @@ function firebaseStore() {
       const gameRef = id ? firebase.ref(firebase.db, `games/${id}`) : firebase.push(firebase.ref(firebase.db, "games"));
       await firebase.update(firebase.ref(firebase.db), {
         [`games/${gameRef.key}`]: game,
+        "settings/updatedAt": firebase.serverTimestamp()
+      });
+    },
+    async startSongBattle() {
+      const current = (await firebase.get(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`))).val();
+      const game = buildSongBattle("running", current);
+      await firebase.update(firebase.ref(firebase.db), {
+        [`games/${SONG_BATTLE.id}`]: game,
+        songBattleAnswers: null,
+        songBattleAdmin: { evaluations: {}, internalPoints: Object.fromEntries(TEAMS.map(team => [team.id, 0])), evaluationUpdatedAt: 0 },
+        "settings/updatedAt": firebase.serverTimestamp()
+      });
+    },
+    async setSongBattleRound(songNumber) {
+      const number = Number(songNumber);
+      if (number < 1 || number > SONG_BATTLE.songCount) throw new Error("Ungültige Songnummer.");
+      await firebase.update(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`), { status: "running", currentSong: number, answersOpen: true, controlUpdatedAt: firebase.serverTimestamp() });
+    },
+    setSongBattleAnswersOpen(open) { return firebase.update(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`), { answersOpen: !!open, controlUpdatedAt: firebase.serverTimestamp() }); },
+    async submitSongBattleAnswer(songNumber, profile, title, artist) {
+      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      const game = (await firebase.get(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`))).val();
+      if (game?.status !== "running" || Number(game.currentSong) !== Number(songNumber) || !game.answersOpen) throw new Error("song-battle-closed");
+      const cleanTitle = title.trim().slice(0, 120), cleanArtist = artist.trim().slice(0, 120);
+      if (!cleanTitle && !cleanArtist) throw new Error("song-battle-empty");
+      const answer = { songNumber: Number(songNumber), title: cleanTitle, artist: cleanArtist, playerName: profile.name, claimantId: firebase.auth.currentUser.uid, updatedAt: Date.now() };
+      await firebase.set(firebase.ref(firebase.db, `songBattleAnswers/${profile.teamId}/song-${songNumber}`), answer);
+      return answer;
+    },
+    async saveSongBattleEvaluation(songNumber, teamId, field, value) {
+      if (!['title', 'artist'].includes(field) || !TEAMS.some(team => team.id === teamId)) throw new Error("Ungültige Bewertung.");
+      const adminSnapshot = await firebase.get(firebase.ref(firebase.db, "songBattleAdmin"));
+      const admin = normaliseSongBattleAdmin(adminSnapshot.val());
+      (((admin.evaluations[`song-${songNumber}`] ||= {})[teamId] ||= {}))[field] = value === true;
+      admin.internalPoints = songBattleScores(admin.evaluations);
+      admin.evaluationUpdatedAt = Date.now();
+      await firebase.set(firebase.ref(firebase.db, "songBattleAdmin"), admin);
+    },
+    async finishSongBattle(ranking) {
+      const [gameSnapshot, adminSnapshot] = await Promise.all([
+        firebase.get(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`)),
+        firebase.get(firebase.ref(firebase.db, "songBattleAdmin"))
+      ]);
+      const game = finalizeSongBattle(gameSnapshot.val(), normaliseSongBattleAdmin(adminSnapshot.val()).evaluations, ranking);
+      await firebase.update(firebase.ref(firebase.db), { [`games/${SONG_BATTLE.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async resetSongBattle() {
+      const current = (await firebase.get(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`))).val();
+      await firebase.update(firebase.ref(firebase.db), {
+        [`games/${SONG_BATTLE.id}`]: buildSongBattle("not-started", current),
+        songBattleAnswers: null,
+        songBattleAdmin: null,
         "settings/updatedAt": firebase.serverTimestamp()
       });
     },
@@ -127,10 +185,20 @@ function localStore() {
     demo: true,
     subscribe(callback) { listeners.add(callback); callback(read()); return () => listeners.delete(callback); },
     subscribeOracleQuestions(callback) { const listener = state => callback(state.oracleQuestions || {}); listeners.add(listener); callback(read().oracleQuestions || {}); return () => listeners.delete(listener); },
+    subscribeSongBattleAnswers(callback) { const listener = state => callback(state.songBattleAnswers || {}); listeners.add(listener); callback(read().songBattleAnswers || {}); return () => listeners.delete(listener); },
+    subscribeSongBattleAdmin(callback) { const listener = state => callback(normaliseSongBattleAdmin(state.songBattleAdmin)); listeners.add(listener); callback(normaliseSongBattleAdmin(read().songBattleAdmin)); return () => listeners.delete(listener); },
+    async subscribeSongBattleTeam(teamId, callback) { const listener = state => callback(state.songBattleAnswers?.[teamId] || {}); listeners.add(listener); callback(read().songBattleAnswers?.[teamId] || {}); return () => listeners.delete(listener); },
     async saveOracleQuestion(question, id = null) { const state = read(); state.oracleQuestions[id || `question-${Date.now()}`] = { ...question, updatedAt: Date.now() }; write(state); },
     async deleteOracleQuestion(id) { const state = read(); delete state.oracleQuestions[id]; write(state); },
     auth: { login: async () => ({ user: { uid: "demo" } }), logout: async () => {}, observe: callback => { callback({ uid: "demo" }); return () => {}; } },
     async saveGame(game, id = null) { const state = read(); state.games[id || `demo-${Date.now()}`] = game; state.settings.updatedAt = Date.now(); write(state); },
+    async startSongBattle() { const state = read(); state.games[SONG_BATTLE.id] = buildSongBattle("running", state.games[SONG_BATTLE.id]); state.songBattleAnswers = {}; state.songBattleAdmin = normaliseSongBattleAdmin(); state.settings.updatedAt = Date.now(); write(state); },
+    async setSongBattleRound(songNumber) { const state = read(); const game = state.games[SONG_BATTLE.id]; const number = Number(songNumber); if (game?.status !== "running" || number < 1 || number > SONG_BATTLE.songCount) throw new Error("Ungültige Songrunde."); game.currentSong = number; game.answersOpen = true; game.controlUpdatedAt = Date.now(); write(state); },
+    async setSongBattleAnswersOpen(open) { const state = read(); const game = state.games[SONG_BATTLE.id]; if (game?.status !== "running") throw new Error("Song Battle läuft nicht."); game.answersOpen = !!open; game.controlUpdatedAt = Date.now(); write(state); },
+    async submitSongBattleAnswer(songNumber, profile, title, artist) { const state = read(); const game = state.games[SONG_BATTLE.id]; if (game?.status !== "running" || Number(game.currentSong) !== Number(songNumber) || !game.answersOpen) throw new Error("song-battle-closed"); const cleanTitle = title.trim().slice(0, 120), cleanArtist = artist.trim().slice(0, 120); if (!cleanTitle && !cleanArtist) throw new Error("song-battle-empty"); const answer = { songNumber: Number(songNumber), title: cleanTitle, artist: cleanArtist, playerName: profile.name, claimantId: profile.id, updatedAt: Date.now() }; ((state.songBattleAnswers[profile.teamId] ||= {})[`song-${songNumber}`]) = answer; write(state); return answer; },
+    async saveSongBattleEvaluation(songNumber, teamId, field, value) { const state = read(); if (!['title', 'artist'].includes(field) || !TEAMS.some(team => team.id === teamId)) throw new Error("Ungültige Bewertung."); const admin = state.songBattleAdmin = normaliseSongBattleAdmin(state.songBattleAdmin); (((admin.evaluations[`song-${songNumber}`] ||= {})[teamId] ||= {}))[field] = value === true; admin.internalPoints = songBattleScores(admin.evaluations); admin.evaluationUpdatedAt = Date.now(); write(state); },
+    async finishSongBattle(ranking) { const state = read(); state.games[SONG_BATTLE.id] = finalizeSongBattle(state.games[SONG_BATTLE.id], normaliseSongBattleAdmin(state.songBattleAdmin).evaluations, ranking); state.settings.updatedAt = Date.now(); write(state); },
+    async resetSongBattle() { const state = read(); state.games[SONG_BATTLE.id] = buildSongBattle("not-started", state.games[SONG_BATTLE.id]); state.songBattleAnswers = {}; state.songBattleAdmin = normaliseSongBattleAdmin(); state.settings.updatedAt = Date.now(); write(state); },
     async claimChallenge(challengeId, profile, points) {
       const state = read();
       const id = `challenge-${challengeId}-${profile.id}`;
@@ -204,8 +272,18 @@ function normalise(value) {
       oracle: { ...EMPTY_STATE.settings.oracle, ...(value?.settings?.oracle || {}) }
     },
     games: value?.games || {},
+    songBattleAnswers: value?.songBattleAnswers || {},
+    songBattleAdmin: normaliseSongBattleAdmin(value?.songBattleAdmin),
     oracleAnswers: value?.oracleAnswers || {},
     oracleQuestions: value?.oracleQuestions || {}
+  };
+}
+
+function normaliseSongBattleAdmin(value = null) {
+  return {
+    evaluations: value?.evaluations || {},
+    internalPoints: { ...Object.fromEntries(TEAMS.map(team => [team.id, 0])), ...(value?.internalPoints || {}) },
+    evaluationUpdatedAt: Number(value?.evaluationUpdatedAt || 0)
   };
 }
 
