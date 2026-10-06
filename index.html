@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=song-1">
+  <link rel="stylesheet" href="styles.css?v=song-2">
 </head>
 <body>
   <div class="stars" aria-hidden="true"></div>
@@ -115,13 +115,19 @@
           <p class="eyebrow">Aktuelles Spiel</p><h2 id="songBattleName">🎵 Song Battle</h2>
           <div id="songBattleRoundView">
             <div class="song-round-badge" id="songBattleRound">Song 1 von 6</div>
-            <form id="songBattleAnswerForm">
+            <div id="songBattleJoin" class="song-participation hidden">
+              <p>Pro Reich nimmt genau eine Person teil und gibt alle Antworten ein.</p>
+              <button id="claimSongBattle" class="primary-button" type="button">Für mein Reich teilnehmen</button>
+            </div>
+            <div id="songBattleOccupied" class="song-answer-closed hidden"></div>
+            <form id="songBattleAnswerForm" class="hidden">
               <label>Titel<input id="songBattleTitle" type="text" maxlength="120" autocomplete="off" placeholder="Songtitel eingeben"></label>
               <label>Interpret<input id="songBattleArtist" type="text" maxlength="120" autocomplete="off" placeholder="Interpret eingeben"></label>
               <button id="saveSongBattleAnswer" class="primary-button" type="submit">Antwort speichern</button>
             </form>
             <div id="songBattleSaved" class="song-answer-saved hidden">✓ Antwort gespeichert <small>Änderungen sind möglich, solange die Runde offen ist.</small></div>
             <div id="songBattleClosed" class="song-answer-closed hidden">🔒 Antworten geschlossen</div>
+            <div id="songBattleReveal" class="song-public-reveal hidden"><p class="eyebrow">Song aufgelöst</p><div id="songBattleRevealList"></div></div>
             <p id="songBattleMessage" class="form-error" role="status"></p>
           </div>
         </div>
@@ -162,8 +168,8 @@
     </div>
   </section>
   <canvas id="confetti" aria-hidden="true"></canvas>
-  <script type="module" src="app.js?v=song-1"></script>
-  <script type="module" src="hunt.js?v=song-1"></script>
-  <script type="module" src="oracle.js?v=song-1"></script>
+  <script type="module" src="app.js?v=song-2"></script>
+  <script type="module" src="hunt.js?v=song-2"></script>
+  <script type="module" src="oracle.js?v=song-2"></script>
 </body>
 </html>

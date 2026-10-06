@@ -15,6 +15,7 @@ export const EMPTY_STATE = {
   },
   games: {},
   songBattleAnswers: {},
+  songBattleParticipants: {},
   songBattleAdmin: { evaluations: {}, internalPoints: {} },
   oracleAnswers: {},
   oracleQuestions: {}
@@ -70,7 +71,11 @@ export function buildSongBattle(status = "running", existing = null) {
     status,
     currentSong: status === "not-started" ? 0 : Number(existing?.currentSong) || 1,
     answersOpen: status === "running" ? existing?.answersOpen !== false : false,
+    revealedSongs: status === "not-started" ? {} : { ...(existing?.revealedSongs || {}) },
+    publicReveals: status === "not-started" ? {} : { ...(existing?.publicReveals || {}) },
     ranking: status === "completed" ? [...(existing?.ranking || [])] : [],
+    placements: status === "completed" ? { ...(existing?.placements || {}) } : {},
+    winnerIds: status === "completed" ? [...(existing?.winnerIds || [])] : [],
     points: status === "completed" ? { ...(existing?.points || emptyTeamPoints()) } : emptyTeamPoints(),
     internalPoints: status === "completed" ? { ...(existing?.internalPoints || emptyTeamPoints()) } : {},
     resultText: status === "completed" ? existing?.resultText || "" : "",
@@ -104,25 +109,28 @@ export function suggestedSongBattleRanking(scores = {}, previousRanking = []) {
   return [...TEAMS].sort((a, b) => Number(scores[b.id] || 0) - Number(scores[a.id] || 0) || (previousPosition.get(a.id) ?? 99) - (previousPosition.get(b.id) ?? 99) || a.name.localeCompare(b.name)).map(team => team.id);
 }
 
-export function finalizeSongBattle(game, evaluations, ranking) {
+export function finalizeSongBattle(game, evaluations) {
   const scores = songBattleScores(evaluations);
-  if (!Array.isArray(ranking) || ranking.length !== TEAMS.length || new Set(ranking).size !== TEAMS.length || ranking.some(id => !TEAMS.some(team => team.id === id))) {
-    throw new Error("Bitte alle fünf Reiche genau einmal einordnen.");
-  }
-  for (let index = 1; index < ranking.length; index += 1) {
-    if (scores[ranking[index - 1]] < scores[ranking[index]]) throw new Error("Ein Reich mit mehr Song-Punkten muss weiter vorne stehen.");
-  }
+  const ranking = suggestedSongBattleRanking(scores, game?.ranking || []);
   const points = emptyTeamPoints();
-  ranking.forEach((id, index) => { points[id] = TEAMS.length - index; });
+  const placements = {};
+  ranking.forEach((id, index) => {
+    const place = index > 0 && scores[id] === scores[ranking[index - 1]] ? placements[ranking[index - 1]] : index + 1;
+    placements[id] = place;
+    points[id] = TEAMS.length + 1 - place;
+  });
+  const winnerIds = ranking.filter(id => placements[id] === 1);
   const now = Date.now();
   return {
     ...game,
     status: "completed",
     answersOpen: false,
     ranking: [...ranking],
+    placements,
+    winnerIds,
     points,
     internalPoints: scores,
-    resultText: ranking.map((teamId, index) => `${index + 1}. ${TEAMS.find(team => team.id === teamId).name} ${scores[teamId]}/12`).join(" · "),
+    resultText: ranking.map(teamId => `${placements[teamId]}. ${TEAMS.find(team => team.id === teamId).name} ${scores[teamId]}/12`).join(" · "),
     source: "song-battle",
     createdAt: game?.status === "completed" ? game.createdAt : now,
     updatedAt: now

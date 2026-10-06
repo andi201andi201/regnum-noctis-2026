@@ -5,7 +5,7 @@
   <meta name="theme-color" content="#08090d"><title>Admin · Regnum Noctis</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=song-1">
+  <link rel="stylesheet" href="styles.css?v=song-2">
 </head>
 <body class="admin-page">
   <div class="stars" aria-hidden="true"></div>
@@ -43,17 +43,16 @@
             <button id="activateSongRound" class="secondary-button" type="button">Ausgewählten Song starten</button>
             <button id="nextSongRound" class="secondary-button" type="button">Nächsten Song starten</button>
           </div>
-          <div id="songAnswerControls" class="hunt-admin-actions"><button id="openSongAnswers" class="primary-button" type="button">Antworten öffnen</button><button id="closeSongAnswers" class="secondary-button" type="button">Antworten sperren</button></div>
+          <div id="songAnswerControls" class="hunt-admin-actions"><button id="openSongAnswers" class="primary-button" type="button">Antworten öffnen</button><button id="closeSongAnswers" class="secondary-button" type="button">Antworten sperren</button><button id="revealSongRound" class="primary-button hidden" type="button">Song auflösen</button></div>
           <p id="songRoundStatus" class="save-message"></p>
 
           <div class="song-admin-heading"><div><p class="eyebrow" id="songAdminRoundTitle">Song 1 von 6</p><h3>Antworten der Reiche</h3></div><strong id="songSubmissionCount">0 / 5 abgegeben</strong></div>
           <div id="songTeamAnswers" class="song-team-answers"></div>
 
           <div id="songFinalisation" class="song-finalisation hidden">
-            <div id="songTieWarning" class="song-tie-warning hidden">⚠️ Gleichstand – Stechen erforderlich</div>
             <p id="songFinalHelp" class="save-message"></p>
             <div id="songFinalRanking" class="song-final-ranking"></div>
-            <button id="finishSongBattle" class="primary-button" type="button">Endrangfolge speichern · Punkte vergeben</button>
+            <button id="finishSongBattle" class="primary-button" type="button">Resultat abschliessen · Punkte vergeben</button>
             <p id="songFinishMessage" class="form-error" role="status"></p>
           </div>
         </div>
@@ -84,7 +83,7 @@
         <div class="panel-title"><div><p class="eyebrow">Neuer Eintrag</p><h2 id="formTitle">Spielresultat erfassen</h2></div><button id="cancelEdit" class="text-button hidden">Abbrechen</button></div>
         <form id="resultForm">
           <div class="form-grid"><label>Spiel<input id="gameName" type="text" placeholder="z. B. Nachtduell" required maxlength="60"></label><label>Runde / Zusatz<input id="roundName" type="text" placeholder="z. B. Runde 1" maxlength="60"></label></div>
-          <label>Kurzes Resultat (optional)<input id="resultText" type="text" placeholder="z. B. Draco gewinnt das Stechen" maxlength="120"></label>
+          <label>Kurzes Resultat (optional)<input id="resultText" type="text" placeholder="z. B. Draco gewinnt knapp" maxlength="120"></label>
           <div id="scoreInputs" class="score-inputs"></div>
           <button class="primary-button" type="submit">Resultat speichern</button><p id="saveMessage" class="save-message"></p>
         </form>
@@ -94,6 +93,6 @@
     </div>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="admin.js?v=song-1"></script>
+  <script type="module" src="admin.js?v=song-2"></script>
 </body>
 </html>

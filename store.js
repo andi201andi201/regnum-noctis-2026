@@ -1,5 +1,5 @@
 import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
-import { EMPTY_STATE, TEAMS, SONG_BATTLE, buildSongBattle, songBattleScores, finalizeSongBattle } from "./data.js?v=song-1";
+import { EMPTY_STATE, TEAMS, SONG_BATTLE, buildSongBattle, songBattleScores, finalizeSongBattle } from "./data.js?v=song-2";
 
 const STORAGE_KEY = "regnum-noctis-demo";
 let firebase = null;
@@ -35,10 +35,17 @@ function firebaseStore() {
     },
     subscribeOracleQuestions(callback) { return firebase.onValue(firebase.ref(firebase.db, "oracleQuestions"), snapshot => callback(snapshot.val() || {})); },
     subscribeSongBattleAnswers(callback) { return firebase.onValue(firebase.ref(firebase.db, "songBattleAnswers"), snapshot => callback(snapshot.val() || {})); },
+    subscribeSongBattleParticipants(callback) { return firebase.onValue(firebase.ref(firebase.db, "songBattleParticipants"), snapshot => callback(snapshot.val() || {})); },
     subscribeSongBattleAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "songBattleAdmin"), snapshot => callback(normaliseSongBattleAdmin(snapshot.val()))); },
     async subscribeSongBattleTeam(teamId, callback) {
       if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
-      return firebase.onValue(firebase.ref(firebase.db, `songBattleAnswers/${teamId}`), snapshot => callback(snapshot.val() || {}));
+      let answers = {}, participant = null;
+      const emit = () => callback({ answers, participant, owned: participant?.claimantId === firebase.auth.currentUser?.uid });
+      const stops = [
+        firebase.onValue(firebase.ref(firebase.db, `songBattleAnswers/${teamId}`), snapshot => { answers = snapshot.val() || {}; emit(); }),
+        firebase.onValue(firebase.ref(firebase.db, `songBattleParticipants/${teamId}`), snapshot => { participant = snapshot.val() || null; emit(); })
+      ];
+      return () => stops.forEach(stop => stop());
     },
     async saveOracleQuestion(question, id = null) { const questionRef = id ? firebase.ref(firebase.db, `oracleQuestions/${id}`) : firebase.push(firebase.ref(firebase.db, "oracleQuestions")); await firebase.set(questionRef, { ...question, updatedAt: Date.now() }); },
     deleteOracleQuestion(id) { return firebase.remove(firebase.ref(firebase.db, `oracleQuestions/${id}`)); },
@@ -60,6 +67,7 @@ function firebaseStore() {
       await firebase.update(firebase.ref(firebase.db), {
         [`games/${SONG_BATTLE.id}`]: game,
         songBattleAnswers: null,
+        songBattleParticipants: null,
         songBattleAdmin: { evaluations: {}, internalPoints: Object.fromEntries(TEAMS.map(team => [team.id, 0])), evaluationUpdatedAt: 0 },
         "settings/updatedAt": firebase.serverTimestamp()
       });
@@ -67,13 +75,31 @@ function firebaseStore() {
     async setSongBattleRound(songNumber) {
       const number = Number(songNumber);
       if (number < 1 || number > SONG_BATTLE.songCount) throw new Error("Ungültige Songnummer.");
+      const game = (await firebase.get(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`))).val();
+      if (game?.revealedSongs?.[`song-${number}`]) throw new Error("Dieser Song wurde bereits aufgelöst und kann nicht erneut geöffnet werden.");
       await firebase.update(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`), { status: "running", currentSong: number, answersOpen: true, controlUpdatedAt: firebase.serverTimestamp() });
     },
-    setSongBattleAnswersOpen(open) { return firebase.update(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`), { answersOpen: !!open, controlUpdatedAt: firebase.serverTimestamp() }); },
+    async setSongBattleAnswersOpen(open) {
+      const gameRef = firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`);
+      const game = (await firebase.get(gameRef)).val();
+      if (open && game?.revealedSongs?.[`song-${game.currentSong}`]) throw new Error("Ein aufgelöster Song kann nicht erneut geöffnet werden.");
+      return firebase.update(gameRef, { answersOpen: !!open, controlUpdatedAt: firebase.serverTimestamp() });
+    },
+    async claimSongBattleTeam(profile) {
+      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      const participantRef = firebase.ref(firebase.db, `songBattleParticipants/${profile.teamId}`);
+      const claimantId = firebase.auth.currentUser.uid;
+      const result = await firebase.runTransaction(participantRef, current => current || { claimantId, playerName: profile.name, joinedAt: Date.now() });
+      const participant = result.snapshot.val();
+      return { claimed: participant?.claimantId === claimantId, participant };
+    },
+    releaseSongBattleTeam(teamId) { return firebase.update(firebase.ref(firebase.db), { [`songBattleParticipants/${teamId}`]: null, [`songBattleAnswers/${teamId}`]: null }); },
     async submitSongBattleAnswer(songNumber, profile, title, artist) {
       if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
       const game = (await firebase.get(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`))).val();
       if (game?.status !== "running" || Number(game.currentSong) !== Number(songNumber) || !game.answersOpen) throw new Error("song-battle-closed");
+      const participant = (await firebase.get(firebase.ref(firebase.db, `songBattleParticipants/${profile.teamId}`))).val();
+      if (participant?.claimantId !== firebase.auth.currentUser.uid) throw new Error("song-battle-not-participant");
       const cleanTitle = title.trim().slice(0, 120), cleanArtist = artist.trim().slice(0, 120);
       if (!cleanTitle && !cleanArtist) throw new Error("song-battle-empty");
       const answer = { songNumber: Number(songNumber), title: cleanTitle, artist: cleanArtist, playerName: profile.name, claimantId: firebase.auth.currentUser.uid, updatedAt: Date.now() };
@@ -87,14 +113,36 @@ function firebaseStore() {
       (((admin.evaluations[`song-${songNumber}`] ||= {})[teamId] ||= {}))[field] = value === true;
       admin.internalPoints = songBattleScores(admin.evaluations);
       admin.evaluationUpdatedAt = Date.now();
-      await firebase.set(firebase.ref(firebase.db, "songBattleAdmin"), admin);
+      const gameSnapshot = await firebase.get(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`));
+      const game = gameSnapshot.val();
+      const updates = { songBattleAdmin: admin };
+      if (game?.revealedSongs?.[`song-${songNumber}`]) {
+        const answers = (await firebase.get(firebase.ref(firebase.db, "songBattleAnswers"))).val() || {};
+        updates[`games/${SONG_BATTLE.id}/publicReveals/song-${songNumber}`] = buildSongPublicReveal(answers, admin.evaluations, songNumber);
+      }
+      await firebase.update(firebase.ref(firebase.db), updates);
     },
-    async finishSongBattle(ranking) {
+    async revealSongBattleSong(songNumber) {
+      const [gameSnapshot, answersSnapshot, adminSnapshot] = await Promise.all([
+        firebase.get(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`)),
+        firebase.get(firebase.ref(firebase.db, "songBattleAnswers")),
+        firebase.get(firebase.ref(firebase.db, "songBattleAdmin"))
+      ]);
+      const game = gameSnapshot.val(), answers = answersSnapshot.val() || {}, admin = normaliseSongBattleAdmin(adminSnapshot.val());
+      if (game?.status !== "running" || Number(game.currentSong) !== Number(songNumber) || game.answersOpen) throw new Error("Antworten zuerst sperren.");
+      const reveal = buildSongPublicReveal(answers, admin.evaluations, songNumber, true);
+      await firebase.update(firebase.ref(firebase.db), {
+        [`games/${SONG_BATTLE.id}/revealedSongs/song-${songNumber}`]: true,
+        [`games/${SONG_BATTLE.id}/publicReveals/song-${songNumber}`]: reveal,
+        [`games/${SONG_BATTLE.id}/controlUpdatedAt`]: firebase.serverTimestamp()
+      });
+    },
+    async finishSongBattle() {
       const [gameSnapshot, adminSnapshot] = await Promise.all([
         firebase.get(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`)),
         firebase.get(firebase.ref(firebase.db, "songBattleAdmin"))
       ]);
-      const game = finalizeSongBattle(gameSnapshot.val(), normaliseSongBattleAdmin(adminSnapshot.val()).evaluations, ranking);
+      const game = finalizeSongBattle(gameSnapshot.val(), normaliseSongBattleAdmin(adminSnapshot.val()).evaluations);
       await firebase.update(firebase.ref(firebase.db), { [`games/${SONG_BATTLE.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() });
     },
     async resetSongBattle() {
@@ -102,6 +150,7 @@ function firebaseStore() {
       await firebase.update(firebase.ref(firebase.db), {
         [`games/${SONG_BATTLE.id}`]: buildSongBattle("not-started", current),
         songBattleAnswers: null,
+        songBattleParticipants: null,
         songBattleAdmin: null,
         "settings/updatedAt": firebase.serverTimestamp()
       });
@@ -186,19 +235,23 @@ function localStore() {
     subscribe(callback) { listeners.add(callback); callback(read()); return () => listeners.delete(callback); },
     subscribeOracleQuestions(callback) { const listener = state => callback(state.oracleQuestions || {}); listeners.add(listener); callback(read().oracleQuestions || {}); return () => listeners.delete(listener); },
     subscribeSongBattleAnswers(callback) { const listener = state => callback(state.songBattleAnswers || {}); listeners.add(listener); callback(read().songBattleAnswers || {}); return () => listeners.delete(listener); },
+    subscribeSongBattleParticipants(callback) { const listener = state => callback(state.songBattleParticipants || {}); listeners.add(listener); callback(read().songBattleParticipants || {}); return () => listeners.delete(listener); },
     subscribeSongBattleAdmin(callback) { const listener = state => callback(normaliseSongBattleAdmin(state.songBattleAdmin)); listeners.add(listener); callback(normaliseSongBattleAdmin(read().songBattleAdmin)); return () => listeners.delete(listener); },
-    async subscribeSongBattleTeam(teamId, callback) { const listener = state => callback(state.songBattleAnswers?.[teamId] || {}); listeners.add(listener); callback(read().songBattleAnswers?.[teamId] || {}); return () => listeners.delete(listener); },
+    async subscribeSongBattleTeam(teamId, callback) { const listener = state => { const participant = state.songBattleParticipants?.[teamId] || null; callback({ answers: state.songBattleAnswers?.[teamId] || {}, participant, owned: participant?.claimantId === getLocalProfileId() }); }; listeners.add(listener); listener(read()); return () => listeners.delete(listener); },
     async saveOracleQuestion(question, id = null) { const state = read(); state.oracleQuestions[id || `question-${Date.now()}`] = { ...question, updatedAt: Date.now() }; write(state); },
     async deleteOracleQuestion(id) { const state = read(); delete state.oracleQuestions[id]; write(state); },
     auth: { login: async () => ({ user: { uid: "demo" } }), logout: async () => {}, observe: callback => { callback({ uid: "demo" }); return () => {}; } },
     async saveGame(game, id = null) { const state = read(); state.games[id || `demo-${Date.now()}`] = game; state.settings.updatedAt = Date.now(); write(state); },
-    async startSongBattle() { const state = read(); state.games[SONG_BATTLE.id] = buildSongBattle("running", state.games[SONG_BATTLE.id]); state.songBattleAnswers = {}; state.songBattleAdmin = normaliseSongBattleAdmin(); state.settings.updatedAt = Date.now(); write(state); },
-    async setSongBattleRound(songNumber) { const state = read(); const game = state.games[SONG_BATTLE.id]; const number = Number(songNumber); if (game?.status !== "running" || number < 1 || number > SONG_BATTLE.songCount) throw new Error("Ungültige Songrunde."); game.currentSong = number; game.answersOpen = true; game.controlUpdatedAt = Date.now(); write(state); },
-    async setSongBattleAnswersOpen(open) { const state = read(); const game = state.games[SONG_BATTLE.id]; if (game?.status !== "running") throw new Error("Song Battle läuft nicht."); game.answersOpen = !!open; game.controlUpdatedAt = Date.now(); write(state); },
-    async submitSongBattleAnswer(songNumber, profile, title, artist) { const state = read(); const game = state.games[SONG_BATTLE.id]; if (game?.status !== "running" || Number(game.currentSong) !== Number(songNumber) || !game.answersOpen) throw new Error("song-battle-closed"); const cleanTitle = title.trim().slice(0, 120), cleanArtist = artist.trim().slice(0, 120); if (!cleanTitle && !cleanArtist) throw new Error("song-battle-empty"); const answer = { songNumber: Number(songNumber), title: cleanTitle, artist: cleanArtist, playerName: profile.name, claimantId: profile.id, updatedAt: Date.now() }; ((state.songBattleAnswers[profile.teamId] ||= {})[`song-${songNumber}`]) = answer; write(state); return answer; },
-    async saveSongBattleEvaluation(songNumber, teamId, field, value) { const state = read(); if (!['title', 'artist'].includes(field) || !TEAMS.some(team => team.id === teamId)) throw new Error("Ungültige Bewertung."); const admin = state.songBattleAdmin = normaliseSongBattleAdmin(state.songBattleAdmin); (((admin.evaluations[`song-${songNumber}`] ||= {})[teamId] ||= {}))[field] = value === true; admin.internalPoints = songBattleScores(admin.evaluations); admin.evaluationUpdatedAt = Date.now(); write(state); },
-    async finishSongBattle(ranking) { const state = read(); state.games[SONG_BATTLE.id] = finalizeSongBattle(state.games[SONG_BATTLE.id], normaliseSongBattleAdmin(state.songBattleAdmin).evaluations, ranking); state.settings.updatedAt = Date.now(); write(state); },
-    async resetSongBattle() { const state = read(); state.games[SONG_BATTLE.id] = buildSongBattle("not-started", state.games[SONG_BATTLE.id]); state.songBattleAnswers = {}; state.songBattleAdmin = normaliseSongBattleAdmin(); state.settings.updatedAt = Date.now(); write(state); },
+    async startSongBattle() { const state = read(); state.games[SONG_BATTLE.id] = buildSongBattle("running", state.games[SONG_BATTLE.id]); state.songBattleAnswers = {}; state.songBattleParticipants = {}; state.songBattleAdmin = normaliseSongBattleAdmin(); state.settings.updatedAt = Date.now(); write(state); },
+    async setSongBattleRound(songNumber) { const state = read(); const game = state.games[SONG_BATTLE.id]; const number = Number(songNumber); if (game?.status !== "running" || number < 1 || number > SONG_BATTLE.songCount) throw new Error("Ungültige Songrunde."); if (game.revealedSongs?.[`song-${number}`]) throw new Error("Dieser Song wurde bereits aufgelöst und kann nicht erneut geöffnet werden."); game.currentSong = number; game.answersOpen = true; game.controlUpdatedAt = Date.now(); write(state); },
+    async setSongBattleAnswersOpen(open) { const state = read(); const game = state.games[SONG_BATTLE.id]; if (game?.status !== "running") throw new Error("Song Battle läuft nicht."); if (open && game.revealedSongs?.[`song-${game.currentSong}`]) throw new Error("Ein aufgelöster Song kann nicht erneut geöffnet werden."); game.answersOpen = !!open; game.controlUpdatedAt = Date.now(); write(state); },
+    async claimSongBattleTeam(profile) { const state = read(); const current = state.songBattleParticipants[profile.teamId]; if (!current) state.songBattleParticipants[profile.teamId] = { claimantId: profile.id, playerName: profile.name, joinedAt: Date.now() }; write(state); const participant = state.songBattleParticipants[profile.teamId]; return { claimed: participant.claimantId === profile.id, participant }; },
+    async releaseSongBattleTeam(teamId) { const state = read(); delete state.songBattleParticipants[teamId]; delete state.songBattleAnswers[teamId]; write(state); },
+    async submitSongBattleAnswer(songNumber, profile, title, artist) { const state = read(); const game = state.games[SONG_BATTLE.id]; if (game?.status !== "running" || Number(game.currentSong) !== Number(songNumber) || !game.answersOpen) throw new Error("song-battle-closed"); if (state.songBattleParticipants?.[profile.teamId]?.claimantId !== profile.id) throw new Error("song-battle-not-participant"); const cleanTitle = title.trim().slice(0, 120), cleanArtist = artist.trim().slice(0, 120); if (!cleanTitle && !cleanArtist) throw new Error("song-battle-empty"); const answer = { songNumber: Number(songNumber), title: cleanTitle, artist: cleanArtist, playerName: profile.name, claimantId: profile.id, updatedAt: Date.now() }; ((state.songBattleAnswers[profile.teamId] ||= {})[`song-${songNumber}`]) = answer; write(state); return answer; },
+    async saveSongBattleEvaluation(songNumber, teamId, field, value) { const state = read(); if (!['title', 'artist'].includes(field) || !TEAMS.some(team => team.id === teamId)) throw new Error("Ungültige Bewertung."); const admin = state.songBattleAdmin = normaliseSongBattleAdmin(state.songBattleAdmin); (((admin.evaluations[`song-${songNumber}`] ||= {})[teamId] ||= {}))[field] = value === true; admin.internalPoints = songBattleScores(admin.evaluations); admin.evaluationUpdatedAt = Date.now(); if (state.games[SONG_BATTLE.id]?.revealedSongs?.[`song-${songNumber}`]) state.games[SONG_BATTLE.id].publicReveals[`song-${songNumber}`] = buildSongPublicReveal(state.songBattleAnswers, admin.evaluations, songNumber); write(state); },
+    async revealSongBattleSong(songNumber) { const state = read(); const game = state.games[SONG_BATTLE.id]; if (game?.status !== "running" || Number(game.currentSong) !== Number(songNumber) || game.answersOpen) throw new Error("Antworten zuerst sperren."); const key = `song-${songNumber}`; (game.revealedSongs ||= {})[key] = true; (game.publicReveals ||= {})[key] = buildSongPublicReveal(state.songBattleAnswers, state.songBattleAdmin.evaluations, songNumber, true); game.controlUpdatedAt = Date.now(); write(state); },
+    async finishSongBattle() { const state = read(); state.games[SONG_BATTLE.id] = finalizeSongBattle(state.games[SONG_BATTLE.id], normaliseSongBattleAdmin(state.songBattleAdmin).evaluations); state.settings.updatedAt = Date.now(); write(state); },
+    async resetSongBattle() { const state = read(); state.games[SONG_BATTLE.id] = buildSongBattle("not-started", state.games[SONG_BATTLE.id]); state.songBattleAnswers = {}; state.songBattleParticipants = {}; state.songBattleAdmin = normaliseSongBattleAdmin(); state.settings.updatedAt = Date.now(); write(state); },
     async claimChallenge(challengeId, profile, points) {
       const state = read();
       const id = `challenge-${challengeId}-${profile.id}`;
@@ -273,6 +326,7 @@ function normalise(value) {
     },
     games: value?.games || {},
     songBattleAnswers: value?.songBattleAnswers || {},
+    songBattleParticipants: value?.songBattleParticipants || {},
     songBattleAdmin: normaliseSongBattleAdmin(value?.songBattleAdmin),
     oracleAnswers: value?.oracleAnswers || {},
     oracleQuestions: value?.oracleQuestions || {}
@@ -285,6 +339,29 @@ function normaliseSongBattleAdmin(value = null) {
     internalPoints: { ...Object.fromEntries(TEAMS.map(team => [team.id, 0])), ...(value?.internalPoints || {}) },
     evaluationUpdatedAt: Number(value?.evaluationUpdatedAt || 0)
   };
+}
+
+function buildSongPublicReveal(answers, evaluations, songNumber, validate = false) {
+  const key = `song-${songNumber}`;
+  const teams = {};
+  TEAMS.forEach(team => {
+    const answer = answers?.[team.id]?.[key] || null;
+    const evaluation = evaluations?.[key]?.[team.id] || {};
+    if (validate && answer && (typeof evaluation.title !== "boolean" || typeof evaluation.artist !== "boolean")) throw new Error(`${team.name}: Antwort zuerst vollständig bewerten.`);
+    teams[team.id] = {
+      submitted: !!answer,
+      title: answer?.title || "",
+      artist: answer?.artist || "",
+      titleCorrect: answer ? evaluation.title === true : false,
+      artistCorrect: answer ? evaluation.artist === true : false
+    };
+  });
+  return { songNumber: Number(songNumber), teams, revealedAt: Date.now() };
+}
+
+function getLocalProfileId() {
+  try { return JSON.parse(localStorage.getItem("regnum-noctis-player") || "null")?.id || null; }
+  catch { return null; }
 }
 
 function buildOracleResult(state, answerOverride = null) {

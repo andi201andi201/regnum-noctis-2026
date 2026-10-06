@@ -1,12 +1,12 @@
-import { TEAMS, sortedGames, formatTime, BALLON_GAME, SONG_BATTLE, GAME_STATUSES, buildBallonGame, hasGameResult, songBattleScores, songBattleTieGroups, suggestedSongBattleRanking } from "./data.js?v=song-1";
-import { getStore } from "./store.js?v=song-1";
+import { TEAMS, sortedGames, formatTime, BALLON_GAME, SONG_BATTLE, GAME_STATUSES, buildBallonGame, hasGameResult, songBattleScores, suggestedSongBattleRanking } from "./data.js?v=song-2";
+import { getStore } from "./store.js?v=song-2";
 import { HUNT_DURATION_MINUTES } from "./hunt-data.js";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
 let currentState = null, editingId = null, oracleQuestions = {}, oracleQuestionsUnsubscribe = null;
-let songAnswers = {}, songAdmin = { evaluations: {}, internalPoints: {} }, songAnswersUnsubscribe = null, songAdminUnsubscribe = null;
-let songReviewNumber = 1, songRankingDirty = false, songRankingSignature = null;
+let songAnswers = {}, songParticipants = {}, songAdmin = { evaluations: {}, internalPoints: {} }, songAnswersUnsubscribe = null, songParticipantsUnsubscribe = null, songAdminUnsubscribe = null;
+let songReviewNumber = 1;
 const ADMIN_PASS_HASH = "a80ff0faa95c643a50fbb4252140f964cf050b07a179843c9baa7a2783559da4";
 let ballonDirty = false, ballonSignature = null;
 
@@ -56,7 +56,22 @@ $("#songRoundSelect").addEventListener("change", event => {
 });
 $("#openSongAnswers").addEventListener("click", async () => { await store.setSongBattleAnswersOpen(true); toast(`Song ${currentState.games[SONG_BATTLE.id].currentSong}: Antworten offen`); });
 $("#closeSongAnswers").addEventListener("click", async () => { await store.setSongBattleAnswersOpen(false); toast(`Song ${currentState.games[SONG_BATTLE.id].currentSong}: Antworten gesperrt`); });
+$("#revealSongRound").addEventListener("click", async () => {
+  const button = $("#revealSongRound");
+  button.disabled = true;
+  try { await store.revealSongBattleSong(songReviewNumber); toast(`Song ${songReviewNumber} ist aufgelöst`); }
+  catch (error) { toast(error.message); }
+  finally { button.disabled = false; }
+});
 $("#songTeamAnswers").addEventListener("click", async event => {
+  const releaseButton = event.target.closest("button[data-release-team]");
+  if (releaseButton) {
+    const team = TEAMS.find(item => item.id === releaseButton.dataset.releaseTeam);
+    if (!confirm(`Teilnahme von ${team?.name || "diesem Reich"} freigeben? Bereits gespeicherte Song-Antworten dieses Reichs werden gelöscht.`)) return;
+    await store.releaseSongBattleTeam(releaseButton.dataset.releaseTeam);
+    toast(`${team?.name || "Teilnahme"} freigegeben`);
+    return;
+  }
   const button = event.target.closest("button[data-song-eval]");
   if (!button) return;
   button.disabled = true;
@@ -65,16 +80,12 @@ $("#songTeamAnswers").addEventListener("click", async event => {
   } catch (error) { toast(`Bewertung fehlgeschlagen: ${error.message}`); }
   finally { button.disabled = false; }
 });
-$("#songFinalRanking").addEventListener("change", () => { songRankingDirty = true; validateSongFinalRanking(); });
 $("#finishSongBattle").addEventListener("click", async () => {
   const button = $("#finishSongBattle");
   $("#songFinishMessage").textContent = "";
   try {
-    const ranking = TEAMS.map((_, index) => $(`#song-final-${index}`).value);
-    if (!validateSongFinalRanking(true)) return;
     button.disabled = true;
-    await store.finishSongBattle(ranking);
-    songRankingDirty = false;
+    await store.finishSongBattle();
     toast("Song Battle abgeschlossen · Gesamtpunkte aktualisiert");
   } catch (error) { $("#songFinishMessage").textContent = error.message; }
   finally { button.disabled = false; }
@@ -158,6 +169,10 @@ $("#adminResults").addEventListener("click", async event => {
   const button = event.target.closest("button[data-action]"); if (!button) return;
   const { action, id } = button.dataset;
   if (action === "edit") loadEdit(id);
+  if (action === "delete" && id === SONG_BATTLE.id) {
+    if (confirm("Song Battle vollständig zurücksetzen? Antworten, Bewertungen, Teilnahmen und Punkte werden entfernt.")) { await store.resetSongBattle(); toast("Song Battle zurückgesetzt"); }
+    return;
+  }
   if (action === "delete" && confirm("Dieses Resultat wirklich löschen? Die Rangliste wird sofort neu berechnet.")) { await store.deleteGame(id); toast("Resultat gelöscht"); if (editingId === id) resetForm(); }
 });
 
@@ -242,19 +257,25 @@ function renderSongBattleAdmin(state) {
   $("#songAnswerControls").classList.toggle("hidden", !running);
   $("#openSongAnswers").classList.toggle("hidden", !running || game.answersOpen);
   $("#closeSongAnswers").classList.toggle("hidden", !running || !game.answersOpen);
+  const songKey = `song-${songReviewNumber}`;
+  const currentSongSelected = Number(game.currentSong) === songReviewNumber;
+  const revealed = !!game.revealedSongs?.[songKey];
+  $("#revealSongRound").classList.toggle("hidden", !running || !currentSongSelected || game.answersOpen);
+  $("#revealSongRound").textContent = revealed ? "Auflösung aktualisieren" : "Song auflösen";
+  $("#openSongAnswers").classList.toggle("hidden", !running || game.answersOpen || revealed);
   $("#songRoundStatus").textContent = completed
     ? "Abgeschlossen · Antworten und Bewertungen können weiterhin kontrolliert werden. Zum Übernehmen einer Korrektur Resultat erneut speichern."
     : `Aktuell auf den Handys: Song ${game.currentSong} von ${SONG_BATTLE.songCount} · Antworten ${game.answersOpen ? "offen" : "geschlossen"}`;
   $("#songAdminRoundTitle").textContent = `Song ${songReviewNumber} von ${SONG_BATTLE.songCount}`;
 
-  const songKey = `song-${songReviewNumber}`;
   const submissions = TEAMS.filter(team => songAnswers?.[team.id]?.[songKey]).length;
   $("#songSubmissionCount").textContent = `${submissions} / ${TEAMS.length} abgegeben`;
   $("#songTeamAnswers").innerHTML = TEAMS.map(team => {
     const answer = songAnswers?.[team.id]?.[songKey];
+    const participant = songParticipants?.[team.id];
     const evaluation = songAdmin.evaluations?.[songKey]?.[team.id] || {};
     return `<article class="song-answer-card ${answer ? "submitted" : "missing"}" style="--team:${team.color}">
-      <div class="song-answer-team"><span>${team.marker}</span><div><strong>${team.name.toUpperCase()}</strong><small>${answer ? "✓ abgegeben" : "Noch keine Abgabe"}</small></div></div>
+      <div class="song-answer-team"><span>${team.marker}</span><div><strong>${team.name.toUpperCase()}</strong><small>${participant ? `${escapeHtml(participant.playerName || "Teilnahme reserviert")} · ${answer ? "✓ abgegeben" : "noch offen"}` : "Noch niemand angemeldet"}</small></div>${participant ? `<button type="button" class="song-release-player" data-release-team="${team.id}">Freigeben</button>` : ""}</div>
       <div class="song-answer-copy"><span>Titel</span><b>${escapeHtml(answer?.title || "–")}</b></div>
       <div class="song-evaluation">${evaluationButtons(team.id, "title", evaluation.title, !!answer)}</div>
       <div class="song-answer-copy"><span>Interpret</span><b>${escapeHtml(answer?.artist || "–")}</b></div>
@@ -273,48 +294,26 @@ function evaluationButtons(teamId, field, current, enabled) {
 
 function renderSongFinalisation(game) {
   const scores = songBattleScores(songAdmin.evaluations);
-  const ties = songBattleTieGroups(scores);
   const incomplete = TEAMS.some(team => Array.from({ length: SONG_BATTLE.songCount }, (_, index) => {
     const key = `song-${index + 1}`;
     const answer = songAnswers?.[team.id]?.[key];
     const evaluation = songAdmin.evaluations?.[key]?.[team.id];
     return answer && (typeof evaluation?.title !== "boolean" || typeof evaluation?.artist !== "boolean");
   }).some(Boolean));
-  $("#songTieWarning").classList.toggle("hidden", ties.length === 0);
   $("#songFinalHelp").textContent = incomplete
     ? "Bitte zuerst alle eingegangenen Antworten vollständig mit ✓ oder ✗ bewerten."
-    : ties.length ? "Nur bei gleicher interner Punktzahl darf die Reihenfolge durch das Stechen geändert werden." : "Kein Gleichstand: Die Rangfolge ergibt sich automatisch aus den internen Punkten.";
+    : "Die Rangfolge ergibt sich automatisch. Bei Gleichstand teilen sich die Teams den Platz und erhalten dieselben Gesamtpunkte.";
   $("#finishSongBattle").disabled = incomplete;
 
   const suggested = suggestedSongBattleRanking(scores, game.ranking || []);
-  const signature = JSON.stringify({ scores, ranking: game.ranking || [] });
-  if (!songRankingDirty || signature !== songRankingSignature) {
-    songRankingSignature = signature;
-    songRankingDirty = false;
-    const tiedIds = new Set(ties.flatMap(group => group.teamIds));
-    $("#songFinalRanking").innerHTML = suggested.map((teamId, index) => {
-      const score = scores[teamId];
-      const selectable = tiedIds.has(teamId);
-      const options = suggested.filter(id => scores[id] === score).map(id => {
-        const team = TEAMS.find(item => item.id === id);
-        return `<option value="${id}" ${id === teamId ? "selected" : ""}>${team.name} ${team.marker}</option>`;
-      }).join("");
-      return `<label><span>Platz ${index + 1} <small>${score}/12 · +${TEAMS.length - index}</small></span><select id="song-final-${index}" ${selectable ? "" : "disabled"}>${options}</select></label>`;
-    }).join("");
-  }
-  $("#finishSongBattle").textContent = game.status === "completed" ? "Korrektur übernehmen · Punkte aktualisieren" : "Endrangfolge speichern · Punkte vergeben";
-  validateSongFinalRanking();
-}
-
-function validateSongFinalRanking(report = false) {
-  const selects = TEAMS.map((_, index) => $(`#song-final-${index}`)).filter(Boolean);
-  if (selects.length !== TEAMS.length) return false;
-  const ranking = selects.map(select => select.value);
-  const duplicate = new Set(ranking).size !== ranking.length;
-  selects.forEach(select => select.setCustomValidity?.(duplicate ? "Jedes Reich darf nur einmal vorkommen." : ""));
-  $("#songFinishMessage").textContent = duplicate ? "Jedes Reich darf nur einmal vorkommen. Bitte die Reihenfolge des Stechens korrigieren." : "";
-  if (report && duplicate) selects.find(select => !select.checkValidity?.())?.reportValidity?.();
-  return !duplicate;
+  const placements = {};
+  $("#songFinalRanking").innerHTML = suggested.map((teamId, index) => {
+    const team = TEAMS.find(item => item.id === teamId);
+    const place = index > 0 && scores[teamId] === scores[suggested[index - 1]] ? placements[suggested[index - 1]] : index + 1;
+    placements[teamId] = place;
+    return `<div class="song-final-row" style="--team:${team.color}"><strong>${place}. ${team.marker} ${team.name}</strong><span>${scores[teamId]}/12 · +${TEAMS.length + 1 - place}</span></div>`;
+  }).join("");
+  $("#finishSongBattle").textContent = game.status === "completed" ? "Korrektur übernehmen · Punkte aktualisieren" : "Resultat abschliessen · Punkte vergeben";
 }
 
 async function saveBallonStatus(status) {
@@ -359,9 +358,11 @@ function setAccess(granted) {
   $("#loginPanel").classList.toggle("hidden", granted); $("#adminContent").classList.toggle("hidden", !granted); $("#logoutBtn").classList.toggle("hidden", !granted);
   if (granted && !oracleQuestionsUnsubscribe) oracleQuestionsUnsubscribe = store.subscribeOracleQuestions(questions => { oracleQuestions = questions; renderOracleQuestions(); });
   if (granted && !songAnswersUnsubscribe) songAnswersUnsubscribe = store.subscribeSongBattleAnswers(answers => { songAnswers = answers; if (currentState) renderSongBattleAdmin(currentState); });
+  if (granted && !songParticipantsUnsubscribe) songParticipantsUnsubscribe = store.subscribeSongBattleParticipants(participants => { songParticipants = participants; if (currentState) renderSongBattleAdmin(currentState); });
   if (granted && !songAdminUnsubscribe) songAdminUnsubscribe = store.subscribeSongBattleAdmin(value => { songAdmin = value; if (currentState) renderSongBattleAdmin(currentState); });
   if (!granted && oracleQuestionsUnsubscribe) { oracleQuestionsUnsubscribe(); oracleQuestionsUnsubscribe = null; oracleQuestions = {}; }
   if (!granted && songAnswersUnsubscribe) { songAnswersUnsubscribe(); songAnswersUnsubscribe = null; songAnswers = {}; }
+  if (!granted && songParticipantsUnsubscribe) { songParticipantsUnsubscribe(); songParticipantsUnsubscribe = null; songParticipants = {}; }
   if (!granted && songAdminUnsubscribe) { songAdminUnsubscribe(); songAdminUnsubscribe = null; songAdmin = { evaluations: {}, internalPoints: {} }; }
 }
 async function sha256(value) { const bytes = new TextEncoder().encode(value); const hash = await crypto.subtle.digest("SHA-256", bytes); return [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, "0")).join(""); }
