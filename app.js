@@ -1,5 +1,5 @@
-import { TEAMS, totalsFromGames, sortedGames, formatTime, BALLON_GAME, SONG_BATTLE, GAME_STATUSES, hasGameResult } from "./data.js?v=song-2";
-import { getStore } from "./store.js?v=song-2";
+import { TEAMS, totalsFromGames, sortedGames, formatTime, BALLON_GAME, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult } from "./data.js?v=games-3";
+import { getStore } from "./store.js?v=games-3";
 import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js";
 
 const $ = selector => document.querySelector(selector);
@@ -16,6 +16,7 @@ window.addEventListener("regnum-player-changed", () => {
   if (currentState?.settings?.mode === "live") {
     maybeCelebrateGameWinner(currentState.games?.[BALLON_GAME.id], BALLON_GAME.id);
     maybeCelebrateGameWinner(currentState.games?.[SONG_BATTLE.id], SONG_BATTLE.id);
+    maybeCelebrateGameWinner(currentState.games?.[NOVITIUS_GAME.id], NOVITIUS_GAME.id);
   }
 });
 $("#victoryCelebration").addEventListener("click", hideVictoryCelebration);
@@ -120,6 +121,8 @@ function render(state) {
 
   renderBallonGame(state.games[BALLON_GAME.id]);
   renderSongBattle(state.games[SONG_BATTLE.id]);
+  const novitiusGame = state.games[NOVITIUS_GAME.id];
+  if (novitiusGame?.status === "completed") maybeCelebrateGameWinner(novitiusGame, NOVITIUS_GAME.id);
 
   $("#leaderboard").innerHTML = ranking.map((team, index) => `
     <li class="rank-card ${index === 0 && hasResults ? "leader" : ""}" style="--team:${team.color};--glow:${team.glow}">
@@ -227,7 +230,18 @@ function renderGameResult(game) {
       return `<li style="--team:${team?.color || "#888"}"><b>${place}. ${place === 1 ? "🏆 " : ""}${team?.marker || ""} ${escapeHtml(team?.name || teamId)}</b><span>${Number(game.internalPoints?.[teamId] || 0)}/12 · +${Number(game.points?.[teamId] || 0)}</span></li>`;
     }).join("")}</ol></div></article>`;
   }
+  if (game.id === NOVITIUS_GAME.id && game.status === "completed") {
+    return `<article class="result-row song-public-result novitius-public-result"><div class="result-title"><span>${formatTime(game.createdAt, true)}</span><strong>WER KENNT DEN NOVITIUS? – RESULTAT</strong><small>Teamwertung: Durchschnitt aller angemeldeten Personen</small><ol>${(game.ranking || []).map((teamId, index) => {
+      const team = TEAMS.find(item => item.id === teamId);
+      const place = Number(game.placements?.[teamId] || index + 1);
+      return `<li style="--team:${team?.color || "#888"}"><b>${place}. ${place === 1 ? "🏆 " : ""}${team?.marker || ""} ${escapeHtml(team?.name || teamId)}</b><span>Ø ${formatAverage(game.internalPoints?.[teamId])}/50 · +${Number(game.points?.[teamId] || 0)}</span></li>`;
+    }).join("")}</ol></div></article>`;
+  }
   return `<article class="result-row"><div class="result-title"><span>${formatTime(game.createdAt, true)}</span><strong>${escapeHtml(game.name)}</strong><small>${escapeHtml([game.round, game.resultText].filter(Boolean).join(" · "))}</small></div><div class="point-chips">${pointChips(game.points)}</div></article>`;
+}
+
+function formatAverage(value) {
+  return Number(value || 0).toLocaleString("de-CH", { maximumFractionDigits: 2 });
 }
 
 function maybeCelebrateGameWinner(game, gameId) {

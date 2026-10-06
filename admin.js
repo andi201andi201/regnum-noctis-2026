@@ -1,5 +1,5 @@
-import { TEAMS, sortedGames, formatTime, BALLON_GAME, SONG_BATTLE, GAME_STATUSES, buildBallonGame, hasGameResult, songBattleScores, suggestedSongBattleRanking } from "./data.js?v=song-2";
-import { getStore } from "./store.js?v=song-2";
+import { TEAMS, sortedGames, formatTime, BALLON_GAME, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, buildBallonGame, hasGameResult, songBattleScores, suggestedSongBattleRanking } from "./data.js?v=games-3";
+import { getStore } from "./store.js?v=games-3";
 import { HUNT_DURATION_MINUTES } from "./hunt-data.js";
 
 const $ = selector => document.querySelector(selector);
@@ -7,7 +7,7 @@ const store = await getStore();
 let currentState = null, editingId = null, oracleQuestions = {}, oracleQuestionsUnsubscribe = null;
 let songAnswers = {}, songParticipants = {}, songAdmin = { evaluations: {}, internalPoints: {} }, songAnswersUnsubscribe = null, songParticipantsUnsubscribe = null, songAdminUnsubscribe = null;
 let songReviewNumber = 1;
-const ADMIN_PASS_HASH = "a80ff0faa95c643a50fbb4252140f964cf050b07a179843c9baa7a2783559da4";
+let novitiusAdmin = { questions: {} }, novitiusParticipants = {}, novitiusAnswers = {}, novitiusAdminUnsubscribe = null, novitiusParticipantsUnsubscribe = null, novitiusAnswersUnsubscribe = null, novitiusReviewNumber = 1;
 let ballonDirty = false, ballonSignature = null;
 
 $("#ballonRankInputs").innerHTML = TEAMS.map((_, index) => `<label><span>Platz ${index + 1} <small>+${5 - index} Punkte</small></span><select id="ballon-rank-${index}" required><option value="">Reich wählen …</option>${TEAMS.map(team => `<option value="${team.id}">${team.name} ${team.marker}</option>`).join("")}</select></label>`).join("");
@@ -91,8 +91,55 @@ $("#finishSongBattle").addEventListener("click", async () => {
   finally { button.disabled = false; }
 });
 
+$("#novitiusRoundSelect").innerHTML = Array.from({ length: NOVITIUS_GAME.questionCount }, (_, index) => `<option value="${index + 1}">Frage ${index + 1} von ${NOVITIUS_GAME.questionCount}</option>`).join("");
+$("#novitiusThresholdInputs").innerHTML = [5, 4, 3, 2, 1].map((points, index) => `<label>${points} Punkte<input id="novitius-threshold-${index}" type="number" min="0" step="any" required></label>`).join("");
+$("#startNovitius").addEventListener("click", async () => {
+  if (!confirm("Anmeldung für «Wer kennt den Novitius?» jetzt öffnen?")) return;
+  await withDisabled($("#startNovitius"), async () => { await store.startNovitiusGame(); toast("Anmeldung geöffnet"); });
+});
+$("#resetNovitius").addEventListener("click", async () => {
+  if (!confirm("Spiel vollständig zurücksetzen? Teilnehmende, Antworten und Spielpunkte werden gelöscht. Die vorbereiteten Fragen bleiben erhalten.")) return;
+  await withDisabled($("#resetNovitius"), async () => { await store.resetNovitiusGame(); novitiusReviewNumber = 1; toast("Novitius-Spiel zurückgesetzt"); });
+});
+$("#openNovitiusRegistration").addEventListener("click", async () => { try { await store.setNovitiusRegistration(true); toast("Anmeldung offen"); } catch (error) { toast(error.message); } });
+$("#closeNovitiusRegistration").addEventListener("click", async () => { try { await store.setNovitiusRegistration(false); toast("Teilnehmerliste geschlossen"); } catch (error) { toast(error.message); } });
+$("#novitiusRoundSelect").addEventListener("change", event => { novitiusReviewNumber = Number(event.target.value); if (currentState?.games?.[NOVITIUS_GAME.id]?.status === "completed") renderNovitiusAdmin(currentState); });
+$("#startNovitiusQuestion").addEventListener("click", () => startNovitiusRound(Number($("#novitiusRoundSelect").value)));
+$("#nextNovitiusQuestion").addEventListener("click", () => { const current = Number(currentState?.games?.[NOVITIUS_GAME.id]?.currentQuestion || 0); if (current < NOVITIUS_GAME.questionCount) startNovitiusRound(current + 1); });
+$("#openNovitiusAnswers").addEventListener("click", async () => { await store.setNovitiusAnswersOpen(true); toast("Antworten geöffnet"); });
+$("#closeNovitiusAnswers").addEventListener("click", async () => { await store.setNovitiusAnswersOpen(false); toast("Antworten gesperrt"); });
+$("#revealNovitiusQuestion").addEventListener("click", async () => {
+  const button = $("#revealNovitiusQuestion"); button.disabled = true;
+  try { await store.revealNovitiusQuestion(novitiusReviewNumber); toast(`Frage ${novitiusReviewNumber} aufgelöst`); }
+  catch (error) { toast(error.message); }
+  finally { button.disabled = false; }
+});
+$("#finishNovitius").addEventListener("click", async () => {
+  const button = $("#finishNovitius"); button.disabled = true; $("#novitiusFinishMessage").textContent = "";
+  try { await store.finishNovitiusGame(); toast("Novitius-Spiel abgeschlossen · Punkte aktualisiert"); }
+  catch (error) { $("#novitiusFinishMessage").textContent = error.message; }
+  finally { button.disabled = false; }
+});
+$("#novitiusParticipantList").addEventListener("click", async event => {
+  const button = event.target.closest("button[data-novitius-remove]"); if (!button) return;
+  const participant = novitiusParticipants[button.dataset.novitiusRemove];
+  if (!confirm(`${participant?.playerName || "Teilnehmende Person"} entfernen? Alle Antworten dieser Person werden gelöscht.`)) return;
+  await store.removeNovitiusParticipant(button.dataset.novitiusRemove); toast("Teilnehmende Person entfernt");
+});
+$("#novitiusQuestionList").addEventListener("click", event => { const button = event.target.closest("button[data-novitius-edit]"); if (button) openNovitiusQuestionEditor(Number(button.dataset.novitiusEdit)); });
+$("#cancelNovitiusQuestion").addEventListener("click", () => $("#novitiusQuestionForm").classList.add("hidden"));
+$("#novitiusQuestionType").addEventListener("change", updateNovitiusCorrectInput);
+$("#novitiusQuestionForm").addEventListener("submit", async event => {
+  event.preventDefault(); $("#novitiusQuestionMessage").textContent = "";
+  const number = Number($("#novitiusQuestionNumber").value);
+  try {
+    await store.saveNovitiusQuestion(number, { text: $("#novitiusQuestionText").value, type: $("#novitiusQuestionType").value, unit: $("#novitiusQuestionUnit").value, correctValue: $("#novitiusCorrectValue").value, thresholds: [0,1,2,3,4].map(index => Number($(`#novitius-threshold-${index}`).value)), liveAnswer: $("#novitiusLiveAnswer").checked });
+    $("#novitiusQuestionForm").classList.add("hidden"); toast(`Frage ${number} gespeichert`);
+  } catch (error) { $("#novitiusQuestionMessage").textContent = error.message; }
+});
+
 $("#scoreInputs").innerHTML = TEAMS.map(team => `<label class="score-field" style="--team:${team.color}"><span><i></i>${team.name}</span><input id="score-${team.id}" type="number" inputmode="numeric" value="0" step="1" required></label>`).join("");
-if (store.demo) setAccess(sessionStorage.getItem("regnum-admin-unlocked") === "true");
+if (store.demo) setAccess(true);
 else {
   $("#firebaseEmailField").classList.remove("hidden");
   $("#email").required = true;
@@ -104,20 +151,15 @@ $("#loginForm").addEventListener("submit", async event => {
   event.preventDefault();
   $("#loginError").textContent = "";
   try {
-    if (store.demo) {
-      if (await sha256($("#password").value) !== ADMIN_PASS_HASH) throw new Error("wrong-password");
-      sessionStorage.setItem("regnum-admin-unlocked", "true");
-      setAccess(true);
-      $("#password").value = "";
-    } else await store.auth.login($("#email").value, $("#password").value);
+    if (store.demo) setAccess(true);
+    else await store.auth.login($("#email").value, $("#password").value);
   } catch (error) {
     $("#loginError").textContent = error.message === "wrong-password" ? "Passwort ist falsch." : humanAuthError(error.code);
   }
 });
 $("#logoutBtn").addEventListener("click", async () => {
   if (store.demo) {
-    sessionStorage.removeItem("regnum-admin-unlocked");
-    setAccess(false);
+    toast("Im lokalen Demomodus ist der Adminbereich automatisch offen.");
   } else await store.auth.logout();
 });
 
@@ -173,12 +215,17 @@ $("#adminResults").addEventListener("click", async event => {
     if (confirm("Song Battle vollständig zurücksetzen? Antworten, Bewertungen, Teilnahmen und Punkte werden entfernt.")) { await store.resetSongBattle(); toast("Song Battle zurückgesetzt"); }
     return;
   }
+  if (action === "delete" && id === NOVITIUS_GAME.id) {
+    if (confirm("Novitius-Quiz vollständig zurücksetzen? Teilnahmen, Antworten und Punkte werden entfernt; die vorbereiteten Fragen bleiben erhalten.")) { await store.resetNovitiusGame(); toast("Novitius-Quiz zurückgesetzt"); }
+    return;
+  }
   if (action === "delete" && confirm("Dieses Resultat wirklich löschen? Die Rangliste wird sofort neu berechnet.")) { await store.deleteGame(id); toast("Resultat gelöscht"); if (editingId === id) resetForm(); }
 });
 
 function renderAdmin(state) {
   renderBallonAdmin(state);
   renderSongBattleAdmin(state);
+  renderNovitiusAdmin(state);
   const mode = state.settings.mode || "live";
   document.querySelectorAll("[data-mode]").forEach(button => button.classList.toggle("active", button.dataset.mode === mode));
   $("#modeHelp").textContent = { live: "Rangliste und Resultate sind für alle sichtbar.", frozen: "Publikum sieht keine Punkte – Admin bleibt bedienbar.", final: "Die Siegeransicht wird öffentlich angezeigt." }[mode];
@@ -316,6 +363,89 @@ function renderSongFinalisation(game) {
   $("#finishSongBattle").textContent = game.status === "completed" ? "Korrektur übernehmen · Punkte aktualisieren" : "Resultat abschliessen · Punkte vergeben";
 }
 
+async function startNovitiusRound(number) {
+  const game = currentState?.games?.[NOVITIUS_GAME.id];
+  if (game?.status !== "running") return;
+  if (!game.participantsLocked && !confirm("Die Anmeldung ist noch offen. Mit dem Start wird die Teilnehmerliste geschlossen. Frage trotzdem starten?")) return;
+  if (!confirm(`Frage ${number} starten und Antworten öffnen?`)) return;
+  try { await store.startNovitiusQuestion(number); novitiusReviewNumber = number; toast(`Frage ${number} läuft`); }
+  catch (error) { toast(error.message); }
+}
+
+function renderNovitiusAdmin(state) {
+  const game = state?.games?.[NOVITIUS_GAME.id];
+  const status = game?.status || "not-started";
+  const running = status === "running", completed = status === "completed";
+  if (running && game.currentQuestion) novitiusReviewNumber = Number(game.currentQuestion);
+  $("#novitiusAdminStatus").textContent = GAME_STATUSES[status] || GAME_STATUSES["not-started"];
+  $("#startNovitius").classList.toggle("hidden", status !== "not-started");
+  $("#resetNovitius").classList.toggle("hidden", status === "not-started");
+  $("#novitiusControls").classList.toggle("hidden", status === "not-started");
+  renderNovitiusQuestionList();
+  if (status === "not-started") return;
+
+  const participants = Object.entries(novitiusParticipants);
+  $("#novitiusParticipantCount").textContent = `${participants.length} angemeldet`;
+  $("#novitiusParticipantList").innerHTML = participants.length ? participants.sort(([, a], [, b]) => a.teamId.localeCompare(b.teamId) || a.playerName.localeCompare(b.playerName)).map(([id, participant]) => {
+    const team = TEAMS.find(item => item.id === participant.teamId);
+    return `<span style="--team:${team?.color || "#888"}"><i></i>${escapeHtml(participant.playerName)} · ${team?.marker || ""} ${team?.name || participant.teamId}<button type="button" data-novitius-remove="${id}">×</button></span>`;
+  }).join("") : '<p class="save-message">Noch niemand angemeldet.</p>';
+  $("#openNovitiusRegistration").classList.toggle("hidden", !running || Number(game.currentQuestion || 0) > 0 || game.registrationOpen);
+  $("#closeNovitiusRegistration").classList.toggle("hidden", !running || Number(game.currentQuestion || 0) > 0 || !game.registrationOpen);
+  $("#novitiusRoundSelect").value = String(novitiusReviewNumber);
+  $("#startNovitiusQuestion").classList.toggle("hidden", !running);
+  $("#nextNovitiusQuestion").classList.toggle("hidden", !running || !game.currentQuestion || Number(game.currentQuestion) >= NOVITIUS_GAME.questionCount);
+  $("#novitiusAnswerControls").classList.toggle("hidden", !running || !game.currentQuestion);
+  $("#openNovitiusAnswers").classList.toggle("hidden", !running || !game.currentQuestion || game.answersOpen || game.revealedQuestions?.[`question-${game.currentQuestion}`]);
+  $("#closeNovitiusAnswers").classList.toggle("hidden", !running || !game.currentQuestion || !game.answersOpen);
+  $("#revealNovitiusQuestion").classList.toggle("hidden", !running || !game.currentQuestion || game.answersOpen);
+
+  const key = `question-${novitiusReviewNumber}`;
+  const submitted = participants.filter(([id]) => novitiusAnswers?.[id]?.[key]).length;
+  $("#novitiusRoundStatus").textContent = completed ? "Abgeschlossen · Fragen und Resultat können weiterhin kontrolliert werden." : game.currentQuestion ? `Frage ${game.currentQuestion} von ${NOVITIUS_GAME.questionCount} · ${game.answersOpen ? "Antworten offen" : "Antworten geschlossen"} · ${submitted}/${participants.length} abgegeben` : `Anmeldung ${game.registrationOpen ? "offen" : "geschlossen"} · danach Frage 1 starten`;
+  const reviewedQuestion = novitiusAdmin.questions?.[key];
+  $("#novitiusAdminAnswers").innerHTML = game.currentQuestion ? participants.map(([id, participant]) => {
+    const team = TEAMS.find(item => item.id === participant.teamId), answer = novitiusAnswers?.[id]?.[key];
+    return `<div style="--team:${team?.color || "#888"}"><span>${team?.marker || ""} ${escapeHtml(participant.playerName)}</span><strong>${answer ? escapeHtml(formatNovitiusValue(answer.value, reviewedQuestion?.unit || game.currentQuestionData?.unit)) : "–"}</strong></div>`;
+  }).join("") : "";
+  const finalReady = completed || (Number(game.currentQuestion) === NOVITIUS_GAME.questionCount && !game.answersOpen);
+  $("#novitiusFinalisation").classList.toggle("hidden", !finalReady);
+  $("#finishNovitius").textContent = completed ? "Resultat neu berechnen" : "Spiel abschliessen · Punkte vergeben";
+}
+
+function renderNovitiusQuestionList() {
+  const questions = novitiusAdmin.questions || {};
+  $("#novitiusQuestionList").innerHTML = Array.from({ length: NOVITIUS_GAME.questionCount }, (_, index) => {
+    const number = index + 1, question = questions[`question-${number}`] || {};
+    const answer = question.correctValue === "" || question.correctValue === null || question.correctValue === undefined ? "Antwort noch offen" : `Antwort: ${formatNovitiusValue(question.correctValue, question.unit)}`;
+    return `<article><span>${number}</span><div><strong>${escapeHtml(question.text || "Noch nicht vorbereitet")}</strong><small>${escapeHtml(answer)} · ${question.type === "time" ? "Uhrzeit" : "Zahl"}</small></div><button type="button" data-novitius-edit="${number}">Bearbeiten</button></article>`;
+  }).join("");
+}
+
+function openNovitiusQuestionEditor(number) {
+  const question = novitiusAdmin.questions?.[`question-${number}`]; if (!question) return;
+  $("#novitiusQuestionNumber").value = number;
+  $("#novitiusQuestionText").value = question.text || "";
+  $("#novitiusQuestionType").value = question.type || "number";
+  $("#novitiusQuestionUnit").value = question.unit || "";
+  $("#novitiusCorrectValue").value = question.correctValue ?? "";
+  [0,1,2,3,4].forEach(index => { $(`#novitius-threshold-${index}`).value = Number(question.thresholds?.[index] || 0); });
+  $("#novitiusLiveAnswer").checked = !!question.liveAnswer;
+  updateNovitiusCorrectInput();
+  $("#novitiusQuestionForm").classList.remove("hidden");
+  $("#novitiusQuestionForm").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function updateNovitiusCorrectInput() {
+  const time = $("#novitiusQuestionType").value === "time";
+  $("#novitiusCorrectValue").type = time ? "time" : "number";
+  $("#novitiusCorrectValue").step = time ? "60" : "any";
+}
+
+function formatNovitiusValue(value, unit = "") {
+  return `${value}${unit ? ` ${unit}` : ""}`;
+}
+
 async function saveBallonStatus(status) {
   const controls = [$("#startBallon"), $("#resetBallon"), $("#enterBallonResult")];
   controls.forEach(button => { button.disabled = true; });
@@ -350,7 +480,7 @@ function renderOracleQuestions() {
 function loadOracleEditor(id, question) { $("#oracleQuestionId").value = id; $("#oracleAdminQuestion").value = question.question || ""; $("#oracleAdminAnswer").value = question.answer; $("#oracleAdminUnit").value = question.unit || ""; $("#oracleAdminMinutes").value = question.minutes || 3; $("#oracleAdminPoints").value = question.maxPoints || 5; $("#saveOracleQuestion").textContent = "Änderungen speichern"; $("#cancelOracleEdit").classList.remove("hidden"); $("#oracleAdminForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
 function resetOracleEditor() { $("#oracleAdminForm").reset(); $("#oracleQuestionId").value = ""; $("#oracleAdminMinutes").value = 3; $("#oracleAdminPoints").value = 5; $("#saveOracleQuestion").textContent = "Frage speichern"; $("#cancelOracleEdit").classList.add("hidden"); }
 
-function loadEdit(id) { if (id === BALLON_GAME.id) { ballonDirty = false; renderBallonAdmin(currentState, true); openBallonResult(); $("#ballonAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === SONG_BATTLE.id) { songReviewNumber = 1; renderSongBattleAdmin(currentState); $("#songBattleAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } const game = currentState.games[id]; if (!game) return; editingId = id; $("#formTitle").textContent = "Resultat korrigieren"; $("#cancelEdit").classList.remove("hidden"); $("#gameName").value = game.name || ""; $("#roundName").value = game.round || ""; $("#resultText").value = game.resultText || ""; TEAMS.forEach(team => $(`#score-${team.id}`).value = Number(game.points?.[team.id] || 0)); $("#resultForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
+function loadEdit(id) { if (id === BALLON_GAME.id) { ballonDirty = false; renderBallonAdmin(currentState, true); openBallonResult(); $("#ballonAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === SONG_BATTLE.id) { songReviewNumber = 1; renderSongBattleAdmin(currentState); $("#songBattleAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === NOVITIUS_GAME.id) { novitiusReviewNumber = 1; renderNovitiusAdmin(currentState); $("#novitiusAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } const game = currentState.games[id]; if (!game) return; editingId = id; $("#formTitle").textContent = "Resultat korrigieren"; $("#cancelEdit").classList.remove("hidden"); $("#gameName").value = game.name || ""; $("#roundName").value = game.round || ""; $("#resultText").value = game.resultText || ""; TEAMS.forEach(team => $(`#score-${team.id}`).value = Number(game.points?.[team.id] || 0)); $("#resultForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
 function resetForm() { editingId = null; $("#resultForm").reset(); TEAMS.forEach(team => $(`#score-${team.id}`).value = 0); $("#formTitle").textContent = "Spielresultat erfassen"; $("#cancelEdit").classList.add("hidden"); $("#saveMessage").textContent = ""; }
 function toast(message) { $("#toast").textContent = message; $("#toast").classList.add("show"); setTimeout(() => $("#toast").classList.remove("show"), 2200); }
 async function withDisabled(button, action) { button.disabled = true; try { await action(); } catch (error) { toast(`Speichern fehlgeschlagen: ${error.message}`); } finally { button.disabled = false; } }
@@ -360,11 +490,16 @@ function setAccess(granted) {
   if (granted && !songAnswersUnsubscribe) songAnswersUnsubscribe = store.subscribeSongBattleAnswers(answers => { songAnswers = answers; if (currentState) renderSongBattleAdmin(currentState); });
   if (granted && !songParticipantsUnsubscribe) songParticipantsUnsubscribe = store.subscribeSongBattleParticipants(participants => { songParticipants = participants; if (currentState) renderSongBattleAdmin(currentState); });
   if (granted && !songAdminUnsubscribe) songAdminUnsubscribe = store.subscribeSongBattleAdmin(value => { songAdmin = value; if (currentState) renderSongBattleAdmin(currentState); });
+  if (granted && !novitiusAdminUnsubscribe) novitiusAdminUnsubscribe = store.subscribeNovitiusAdmin(value => { novitiusAdmin = value; renderNovitiusQuestionList(); if (currentState) renderNovitiusAdmin(currentState); });
+  if (granted && !novitiusParticipantsUnsubscribe) novitiusParticipantsUnsubscribe = store.subscribeNovitiusParticipants(value => { novitiusParticipants = value; if (currentState) renderNovitiusAdmin(currentState); });
+  if (granted && !novitiusAnswersUnsubscribe) novitiusAnswersUnsubscribe = store.subscribeNovitiusAnswers(value => { novitiusAnswers = value; if (currentState) renderNovitiusAdmin(currentState); });
   if (!granted && oracleQuestionsUnsubscribe) { oracleQuestionsUnsubscribe(); oracleQuestionsUnsubscribe = null; oracleQuestions = {}; }
   if (!granted && songAnswersUnsubscribe) { songAnswersUnsubscribe(); songAnswersUnsubscribe = null; songAnswers = {}; }
   if (!granted && songParticipantsUnsubscribe) { songParticipantsUnsubscribe(); songParticipantsUnsubscribe = null; songParticipants = {}; }
   if (!granted && songAdminUnsubscribe) { songAdminUnsubscribe(); songAdminUnsubscribe = null; songAdmin = { evaluations: {}, internalPoints: {} }; }
+  if (!granted && novitiusAdminUnsubscribe) { novitiusAdminUnsubscribe(); novitiusAdminUnsubscribe = null; novitiusAdmin = { questions: {} }; }
+  if (!granted && novitiusParticipantsUnsubscribe) { novitiusParticipantsUnsubscribe(); novitiusParticipantsUnsubscribe = null; novitiusParticipants = {}; }
+  if (!granted && novitiusAnswersUnsubscribe) { novitiusAnswersUnsubscribe(); novitiusAnswersUnsubscribe = null; novitiusAnswers = {}; }
 }
-async function sha256(value) { const bytes = new TextEncoder().encode(value); const hash = await crypto.subtle.digest("SHA-256", bytes); return [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, "0")).join(""); }
 function humanAuthError(code) { return ({ "auth/invalid-credential": "E-Mail oder Passwort ist falsch.", "auth/too-many-requests": "Zu viele Versuche. Bitte kurz warten.", "auth/network-request-failed": "Keine Verbindung. Bitte Internet prüfen." })[code] || "Login fehlgeschlagen."; }
 function escapeHtml(value = "") { const div = document.createElement("div"); div.textContent = value; return div.innerHTML; }

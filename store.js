@@ -1,5 +1,5 @@
 import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
-import { EMPTY_STATE, TEAMS, SONG_BATTLE, buildSongBattle, songBattleScores, finalizeSongBattle } from "./data.js?v=song-2";
+import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, buildNovitiusReveal, finalizeNovitiusGame } from "./data.js?v=games-3";
 
 const STORAGE_KEY = "regnum-noctis-demo";
 let firebase = null;
@@ -37,6 +37,9 @@ function firebaseStore() {
     subscribeSongBattleAnswers(callback) { return firebase.onValue(firebase.ref(firebase.db, "songBattleAnswers"), snapshot => callback(snapshot.val() || {})); },
     subscribeSongBattleParticipants(callback) { return firebase.onValue(firebase.ref(firebase.db, "songBattleParticipants"), snapshot => callback(snapshot.val() || {})); },
     subscribeSongBattleAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "songBattleAdmin"), snapshot => callback(normaliseSongBattleAdmin(snapshot.val()))); },
+    subscribeNovitiusAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "novitiusAdmin"), snapshot => callback(normaliseNovitiusAdmin(snapshot.val()))); },
+    subscribeNovitiusParticipants(callback) { return firebase.onValue(firebase.ref(firebase.db, "novitiusParticipants"), snapshot => callback(snapshot.val() || {})); },
+    subscribeNovitiusAnswers(callback) { return firebase.onValue(firebase.ref(firebase.db, "novitiusAnswers"), snapshot => callback(snapshot.val() || {})); },
     async subscribeSongBattleTeam(teamId, callback) {
       if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
       let answers = {}, participant = null;
@@ -44,6 +47,17 @@ function firebaseStore() {
       const stops = [
         firebase.onValue(firebase.ref(firebase.db, `songBattleAnswers/${teamId}`), snapshot => { answers = snapshot.val() || {}; emit(); }),
         firebase.onValue(firebase.ref(firebase.db, `songBattleParticipants/${teamId}`), snapshot => { participant = snapshot.val() || null; emit(); })
+      ];
+      return () => stops.forEach(stop => stop());
+    },
+    async subscribeNovitiusPlayer(callback) {
+      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      const participantId = firebase.auth.currentUser.uid;
+      let participant = null, answers = {};
+      const emit = () => callback({ participantId, participant, answers });
+      const stops = [
+        firebase.onValue(firebase.ref(firebase.db, `novitiusParticipants/${participantId}`), snapshot => { participant = snapshot.val() || null; emit(); }),
+        firebase.onValue(firebase.ref(firebase.db, `novitiusAnswers/${participantId}`), snapshot => { answers = snapshot.val() || {}; emit(); })
       ];
       return () => stops.forEach(stop => stop());
     },
@@ -155,6 +169,123 @@ function firebaseStore() {
         "settings/updatedAt": firebase.serverTimestamp()
       });
     },
+    async saveNovitiusQuestion(number, question) {
+      const clean = cleanNovitiusQuestion(number, question);
+      const gameRef = firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`);
+      const game = (await firebase.get(gameRef)).val();
+      const updates = { [`novitiusAdmin/questions/question-${number}`]: clean };
+      if (game?.revealedQuestions?.[`question-${number}`] && clean.correctValue !== "") {
+        const [participantsSnapshot, answersSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, "novitiusParticipants")), firebase.get(firebase.ref(firebase.db, "novitiusAnswers"))]);
+        const answers = answersSnapshot.val() || {};
+        const questionAnswers = Object.fromEntries(Object.entries(answers).map(([id, values]) => [id, values?.[`question-${number}`]]).filter(([, answer]) => answer));
+        updates[`games/${NOVITIUS_GAME.id}/publicReveals/question-${number}`] = buildNovitiusReveal(clean, participantsSnapshot.val() || {}, questionAnswers);
+      }
+      return firebase.update(firebase.ref(firebase.db), updates);
+    },
+    async startNovitiusGame() {
+      const [gameSnapshot, adminSnapshot] = await Promise.all([
+        firebase.get(firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`)),
+        firebase.get(firebase.ref(firebase.db, "novitiusAdmin"))
+      ]);
+      const game = buildNovitiusGame("running", gameSnapshot.val());
+      const admin = normaliseNovitiusAdmin(adminSnapshot.val());
+      await firebase.update(firebase.ref(firebase.db), {
+        [`games/${NOVITIUS_GAME.id}`]: game,
+        novitiusParticipants: null,
+        novitiusAnswers: null,
+        novitiusAdmin: admin,
+        "settings/updatedAt": firebase.serverTimestamp()
+      });
+    },
+    async setNovitiusRegistration(open) {
+      const gameRef = firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`);
+      const game = (await firebase.get(gameRef)).val();
+      if (game?.status !== "running" || Number(game.currentQuestion || 0) > 0) throw new Error("Die Anmeldung kann nach Frage 1 nicht mehr geändert werden.");
+      return firebase.update(gameRef, { registrationOpen: !!open, participantsLocked: !open, controlUpdatedAt: firebase.serverTimestamp() });
+    },
+    async claimNovitiusParticipant(profile) {
+      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      const participantId = firebase.auth.currentUser.uid;
+      const game = (await firebase.get(firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`))).val();
+      if (game?.status !== "running" || !game.registrationOpen) throw new Error("novitius-registration-closed");
+      const participant = { claimantId: participantId, playerName: profile.name, teamId: profile.teamId, joinedAt: Date.now() };
+      await firebase.set(firebase.ref(firebase.db, `novitiusParticipants/${participantId}`), participant);
+      return { participantId, participant };
+    },
+    removeNovitiusParticipant(participantId) { return firebase.update(firebase.ref(firebase.db), { [`novitiusParticipants/${participantId}`]: null, [`novitiusAnswers/${participantId}`]: null }); },
+    async startNovitiusQuestion(number) {
+      const questionNumber = Number(number);
+      if (questionNumber < 1 || questionNumber > NOVITIUS_GAME.questionCount) throw new Error("Ungültige Frage.");
+      const question = (await firebase.get(firebase.ref(firebase.db, `novitiusAdmin/questions/question-${questionNumber}`))).val();
+      if (!question?.text) throw new Error("Diese Frage ist noch nicht vorbereitet.");
+      const game = (await firebase.get(firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`))).val();
+      if (game?.status !== "running") throw new Error("Das Spiel läuft nicht.");
+      if (game?.revealedQuestions?.[`question-${questionNumber}`]) throw new Error("Diese Frage wurde bereits aufgelöst und kann nicht erneut geöffnet werden.");
+      await firebase.update(firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`), {
+        status: "running",
+        registrationOpen: false,
+        participantsLocked: true,
+        currentQuestion: questionNumber,
+        currentQuestionData: publicNovitiusQuestion(question),
+        answersOpen: true,
+        controlUpdatedAt: firebase.serverTimestamp()
+      });
+    },
+    async setNovitiusAnswersOpen(open) {
+      const gameRef = firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`);
+      const game = (await firebase.get(gameRef)).val();
+      if (game?.status !== "running" || !game.currentQuestion) throw new Error("Es läuft noch keine Frage.");
+      if (open && game.revealedQuestions?.[`question-${game.currentQuestion}`]) throw new Error("Eine aufgelöste Frage kann nicht erneut geöffnet werden.");
+      return firebase.update(gameRef, { answersOpen: !!open, controlUpdatedAt: firebase.serverTimestamp() });
+    },
+    async submitNovitiusAnswer(questionNumber, profile, value) {
+      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      const participantId = firebase.auth.currentUser.uid;
+      const game = (await firebase.get(firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`))).val();
+      if (game?.status !== "running" || Number(game.currentQuestion) !== Number(questionNumber) || !game.answersOpen) throw new Error("novitius-answers-closed");
+      const participant = (await firebase.get(firebase.ref(firebase.db, `novitiusParticipants/${participantId}`))).val();
+      if (!participant || participant.teamId !== profile.teamId) throw new Error("novitius-not-registered");
+      const answer = { value, playerName: participant.playerName, teamId: participant.teamId, claimantId: participantId, updatedAt: Date.now() };
+      await firebase.set(firebase.ref(firebase.db, `novitiusAnswers/${participantId}/question-${questionNumber}`), answer);
+      return answer;
+    },
+    async revealNovitiusQuestion(questionNumber) {
+      const [gameSnapshot, questionSnapshot, participantsSnapshot, answersSnapshot] = await Promise.all([
+        firebase.get(firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`)),
+        firebase.get(firebase.ref(firebase.db, `novitiusAdmin/questions/question-${questionNumber}`)),
+        firebase.get(firebase.ref(firebase.db, "novitiusParticipants")),
+        firebase.get(firebase.ref(firebase.db, "novitiusAnswers"))
+      ]);
+      const game = gameSnapshot.val();
+      if (game?.status !== "running" || Number(game.currentQuestion) !== Number(questionNumber) || game.answersOpen) throw new Error("Antworten zuerst sperren.");
+      const allAnswers = answersSnapshot.val() || {};
+      const questionAnswers = Object.fromEntries(Object.entries(allAnswers).map(([id, values]) => [id, values?.[`question-${questionNumber}`]]).filter(([, answer]) => answer));
+      const reveal = buildNovitiusReveal(questionSnapshot.val(), participantsSnapshot.val() || {}, questionAnswers);
+      await firebase.update(firebase.ref(firebase.db), {
+        [`games/${NOVITIUS_GAME.id}/revealedQuestions/question-${questionNumber}`]: true,
+        [`games/${NOVITIUS_GAME.id}/publicReveals/question-${questionNumber}`]: reveal,
+        [`games/${NOVITIUS_GAME.id}/controlUpdatedAt`]: firebase.serverTimestamp()
+      });
+    },
+    async finishNovitiusGame() {
+      const [gameSnapshot, adminSnapshot, participantsSnapshot, answersSnapshot] = await Promise.all([
+        firebase.get(firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`)),
+        firebase.get(firebase.ref(firebase.db, "novitiusAdmin")),
+        firebase.get(firebase.ref(firebase.db, "novitiusParticipants")),
+        firebase.get(firebase.ref(firebase.db, "novitiusAnswers"))
+      ]);
+      const game = finalizeNovitiusGame(gameSnapshot.val(), normaliseNovitiusAdmin(adminSnapshot.val()).questions, participantsSnapshot.val() || {}, answersSnapshot.val() || {});
+      await firebase.update(firebase.ref(firebase.db), { [`games/${NOVITIUS_GAME.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async resetNovitiusGame() {
+      const current = (await firebase.get(firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`))).val();
+      await firebase.update(firebase.ref(firebase.db), {
+        [`games/${NOVITIUS_GAME.id}`]: buildNovitiusGame("not-started", current),
+        novitiusParticipants: null,
+        novitiusAnswers: null,
+        "settings/updatedAt": firebase.serverTimestamp()
+      });
+    },
     async claimChallenge(challengeId, profile, points) {
       if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
       const uid = firebase.auth.currentUser.uid;
@@ -237,7 +368,11 @@ function localStore() {
     subscribeSongBattleAnswers(callback) { const listener = state => callback(state.songBattleAnswers || {}); listeners.add(listener); callback(read().songBattleAnswers || {}); return () => listeners.delete(listener); },
     subscribeSongBattleParticipants(callback) { const listener = state => callback(state.songBattleParticipants || {}); listeners.add(listener); callback(read().songBattleParticipants || {}); return () => listeners.delete(listener); },
     subscribeSongBattleAdmin(callback) { const listener = state => callback(normaliseSongBattleAdmin(state.songBattleAdmin)); listeners.add(listener); callback(normaliseSongBattleAdmin(read().songBattleAdmin)); return () => listeners.delete(listener); },
+    subscribeNovitiusAdmin(callback) { const listener = state => callback(normaliseNovitiusAdmin(state.novitiusAdmin)); listeners.add(listener); callback(normaliseNovitiusAdmin(read().novitiusAdmin)); return () => listeners.delete(listener); },
+    subscribeNovitiusParticipants(callback) { const listener = state => callback(state.novitiusParticipants || {}); listeners.add(listener); callback(read().novitiusParticipants || {}); return () => listeners.delete(listener); },
+    subscribeNovitiusAnswers(callback) { const listener = state => callback(state.novitiusAnswers || {}); listeners.add(listener); callback(read().novitiusAnswers || {}); return () => listeners.delete(listener); },
     async subscribeSongBattleTeam(teamId, callback) { const listener = state => { const participant = state.songBattleParticipants?.[teamId] || null; callback({ answers: state.songBattleAnswers?.[teamId] || {}, participant, owned: participant?.claimantId === getLocalProfileId() }); }; listeners.add(listener); listener(read()); return () => listeners.delete(listener); },
+    async subscribeNovitiusPlayer(callback) { const participantId = getLocalProfileId(); const listener = state => callback({ participantId, participant: state.novitiusParticipants?.[participantId] || null, answers: state.novitiusAnswers?.[participantId] || {} }); listeners.add(listener); listener(read()); return () => listeners.delete(listener); },
     async saveOracleQuestion(question, id = null) { const state = read(); state.oracleQuestions[id || `question-${Date.now()}`] = { ...question, updatedAt: Date.now() }; write(state); },
     async deleteOracleQuestion(id) { const state = read(); delete state.oracleQuestions[id]; write(state); },
     auth: { login: async () => ({ user: { uid: "demo" } }), logout: async () => {}, observe: callback => { callback({ uid: "demo" }); return () => {}; } },
@@ -252,6 +387,17 @@ function localStore() {
     async revealSongBattleSong(songNumber) { const state = read(); const game = state.games[SONG_BATTLE.id]; if (game?.status !== "running" || Number(game.currentSong) !== Number(songNumber) || game.answersOpen) throw new Error("Antworten zuerst sperren."); const key = `song-${songNumber}`; (game.revealedSongs ||= {})[key] = true; (game.publicReveals ||= {})[key] = buildSongPublicReveal(state.songBattleAnswers, state.songBattleAdmin.evaluations, songNumber, true); game.controlUpdatedAt = Date.now(); write(state); },
     async finishSongBattle() { const state = read(); state.games[SONG_BATTLE.id] = finalizeSongBattle(state.games[SONG_BATTLE.id], normaliseSongBattleAdmin(state.songBattleAdmin).evaluations); state.settings.updatedAt = Date.now(); write(state); },
     async resetSongBattle() { const state = read(); state.games[SONG_BATTLE.id] = buildSongBattle("not-started", state.games[SONG_BATTLE.id]); state.songBattleAnswers = {}; state.songBattleParticipants = {}; state.songBattleAdmin = normaliseSongBattleAdmin(); state.settings.updatedAt = Date.now(); write(state); },
+    async saveNovitiusQuestion(number, question) { const state = read(); state.novitiusAdmin = normaliseNovitiusAdmin(state.novitiusAdmin); const clean = cleanNovitiusQuestion(number, question); state.novitiusAdmin.questions[`question-${number}`] = clean; const game = state.games[NOVITIUS_GAME.id]; if (game?.revealedQuestions?.[`question-${number}`] && clean.correctValue !== "") { const questionAnswers = Object.fromEntries(Object.entries(state.novitiusAnswers || {}).map(([id, values]) => [id, values?.[`question-${number}`]]).filter(([, answer]) => answer)); (game.publicReveals ||= {})[`question-${number}`] = buildNovitiusReveal(clean, state.novitiusParticipants || {}, questionAnswers); } write(state); },
+    async startNovitiusGame() { const state = read(); state.games[NOVITIUS_GAME.id] = buildNovitiusGame("running", state.games[NOVITIUS_GAME.id]); state.novitiusParticipants = {}; state.novitiusAnswers = {}; state.novitiusAdmin = normaliseNovitiusAdmin(state.novitiusAdmin); state.settings.updatedAt = Date.now(); write(state); },
+    async setNovitiusRegistration(open) { const state = read(); const game = state.games[NOVITIUS_GAME.id]; if (game?.status !== "running" || Number(game.currentQuestion || 0) > 0) throw new Error("Die Anmeldung kann nach Frage 1 nicht mehr geändert werden."); game.registrationOpen = !!open; game.participantsLocked = !open; game.controlUpdatedAt = Date.now(); write(state); },
+    async claimNovitiusParticipant(profile) { const state = read(); const game = state.games[NOVITIUS_GAME.id]; if (game?.status !== "running" || !game.registrationOpen) throw new Error("novitius-registration-closed"); const participantId = profile.id; const participant = { claimantId: participantId, playerName: profile.name, teamId: profile.teamId, joinedAt: Date.now() }; state.novitiusParticipants[participantId] = participant; write(state); return { participantId, participant }; },
+    async removeNovitiusParticipant(participantId) { const state = read(); delete state.novitiusParticipants[participantId]; delete state.novitiusAnswers[participantId]; write(state); },
+    async startNovitiusQuestion(number) { const state = read(); const questionNumber = Number(number); if (questionNumber < 1 || questionNumber > NOVITIUS_GAME.questionCount) throw new Error("Ungültige Frage."); const question = normaliseNovitiusAdmin(state.novitiusAdmin).questions[`question-${questionNumber}`]; if (!question?.text) throw new Error("Diese Frage ist noch nicht vorbereitet."); const game = state.games[NOVITIUS_GAME.id]; if (game?.status !== "running") throw new Error("Das Spiel läuft nicht."); if (game.revealedQuestions?.[`question-${questionNumber}`]) throw new Error("Diese Frage wurde bereits aufgelöst und kann nicht erneut geöffnet werden."); game.registrationOpen = false; game.participantsLocked = true; game.currentQuestion = questionNumber; game.currentQuestionData = publicNovitiusQuestion(question); game.answersOpen = true; game.controlUpdatedAt = Date.now(); write(state); },
+    async setNovitiusAnswersOpen(open) { const state = read(); const game = state.games[NOVITIUS_GAME.id]; if (game?.status !== "running" || !game.currentQuestion) throw new Error("Es läuft noch keine Frage."); if (open && game.revealedQuestions?.[`question-${game.currentQuestion}`]) throw new Error("Eine aufgelöste Frage kann nicht erneut geöffnet werden."); game.answersOpen = !!open; game.controlUpdatedAt = Date.now(); write(state); },
+    async submitNovitiusAnswer(questionNumber, profile, value) { const state = read(); const participantId = profile.id; const game = state.games[NOVITIUS_GAME.id]; if (game?.status !== "running" || Number(game.currentQuestion) !== Number(questionNumber) || !game.answersOpen) throw new Error("novitius-answers-closed"); const participant = state.novitiusParticipants?.[participantId]; if (!participant || participant.teamId !== profile.teamId) throw new Error("novitius-not-registered"); const answer = { value, playerName: participant.playerName, teamId: participant.teamId, claimantId: participantId, updatedAt: Date.now() }; ((state.novitiusAnswers[participantId] ||= {})[`question-${questionNumber}`]) = answer; write(state); return answer; },
+    async revealNovitiusQuestion(questionNumber) { const state = read(); const game = state.games[NOVITIUS_GAME.id]; if (game?.status !== "running" || Number(game.currentQuestion) !== Number(questionNumber) || game.answersOpen) throw new Error("Antworten zuerst sperren."); const question = normaliseNovitiusAdmin(state.novitiusAdmin).questions[`question-${questionNumber}`]; const questionAnswers = Object.fromEntries(Object.entries(state.novitiusAnswers).map(([id, values]) => [id, values?.[`question-${questionNumber}`]]).filter(([, answer]) => answer)); const reveal = buildNovitiusReveal(question, state.novitiusParticipants, questionAnswers); (game.revealedQuestions ||= {})[`question-${questionNumber}`] = true; (game.publicReveals ||= {})[`question-${questionNumber}`] = reveal; game.controlUpdatedAt = Date.now(); write(state); },
+    async finishNovitiusGame() { const state = read(); state.games[NOVITIUS_GAME.id] = finalizeNovitiusGame(state.games[NOVITIUS_GAME.id], normaliseNovitiusAdmin(state.novitiusAdmin).questions, state.novitiusParticipants, state.novitiusAnswers); state.settings.updatedAt = Date.now(); write(state); },
+    async resetNovitiusGame() { const state = read(); state.games[NOVITIUS_GAME.id] = buildNovitiusGame("not-started", state.games[NOVITIUS_GAME.id]); state.novitiusParticipants = {}; state.novitiusAnswers = {}; state.settings.updatedAt = Date.now(); write(state); },
     async claimChallenge(challengeId, profile, points) {
       const state = read();
       const id = `challenge-${challengeId}-${profile.id}`;
@@ -328,6 +474,9 @@ function normalise(value) {
     songBattleAnswers: value?.songBattleAnswers || {},
     songBattleParticipants: value?.songBattleParticipants || {},
     songBattleAdmin: normaliseSongBattleAdmin(value?.songBattleAdmin),
+    novitiusParticipants: value?.novitiusParticipants || {},
+    novitiusAnswers: value?.novitiusAnswers || {},
+    novitiusAdmin: normaliseNovitiusAdmin(value?.novitiusAdmin),
     oracleAnswers: value?.oracleAnswers || {},
     oracleQuestions: value?.oracleQuestions || {}
   };
@@ -339,6 +488,22 @@ function normaliseSongBattleAdmin(value = null) {
     internalPoints: { ...Object.fromEntries(TEAMS.map(team => [team.id, 0])), ...(value?.internalPoints || {}) },
     evaluationUpdatedAt: Number(value?.evaluationUpdatedAt || 0)
   };
+}
+
+function normaliseNovitiusAdmin(value = null) {
+  return { questions: Object.fromEntries(Object.entries(NOVITIUS_DEFAULT_QUESTIONS).map(([key, question]) => [key, { ...question, ...(value?.questions?.[key] || {}) }])) };
+}
+
+function cleanNovitiusQuestion(number, question) {
+  const type = question.type === "time" ? "time" : "number";
+  const correctValue = type === "time" ? String(question.correctValue || "") : question.correctValue === "" || question.correctValue === null || question.correctValue === undefined ? "" : Number(question.correctValue);
+  const thresholds = Array.from({ length: 5 }, (_, index) => Math.max(0, Number(question.thresholds?.[index]) || 0));
+  if (thresholds.some((value, index) => index > 0 && value < thresholds[index - 1])) throw new Error("Die Toleranzbereiche müssen von 5 bis 1 Punkt grösser werden.");
+  return { number: Number(number), text: String(question.text || "").trim().slice(0, 180), type, unit: String(question.unit || "").trim().slice(0, 30), correctValue, thresholds, liveAnswer: !!question.liveAnswer };
+}
+
+function publicNovitiusQuestion(question) {
+  return { number: Number(question.number), text: question.text, type: question.type, unit: question.unit || "", liveAnswer: !!question.liveAnswer };
 }
 
 function buildSongPublicReveal(answers, evaluations, songNumber, validate = false) {

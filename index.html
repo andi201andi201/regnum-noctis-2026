@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=song-2">
+  <link rel="stylesheet" href="styles.css?v=games-3">
 </head>
 <body>
   <div class="stars" aria-hidden="true"></div>
@@ -133,6 +133,42 @@
         </div>
       </section>
 
+      <section id="novitiusCard" class="novitius-card hidden" aria-labelledby="novitiusName" aria-live="polite">
+        <div class="hunt-topline"><span>Vormittag · ca. 15 Minuten</span><strong id="novitiusPublicStatus">Anmeldung offen</strong></div>
+        <div class="novitius-content">
+          <p class="eyebrow">Aktuelles Spiel</p><h2 id="novitiusName">Wer kennt den Novitius?</h2>
+          <p class="novitius-intro">Wie gut kennst du Simon? Jede Person spielt selbst; für die Teamwertung zählt der Durchschnitt aller Teilnehmenden.</p>
+
+          <div id="novitiusRegistration" class="novitius-registration hidden">
+            <strong>Jetzt zum Quiz anmelden</strong>
+            <p>Nach dem Start von Frage 1 ist keine Anmeldung mehr möglich.</p>
+            <button id="joinNovitius" class="primary-button" type="button">Mitspielen</button>
+          </div>
+          <div id="novitiusRegistered" class="novitius-registered hidden">✓ Du bist angemeldet. Warte auf Frage 1.</div>
+          <div id="novitiusSpectator" class="song-answer-closed hidden">Die Anmeldung ist geschlossen. Du kannst die Auflösungen mitverfolgen.</div>
+
+          <div id="novitiusQuestionView" class="hidden">
+            <div id="novitiusQuestionBadge" class="song-round-badge">Frage 1 von 10</div>
+            <h3 id="novitiusQuestionText"></h3>
+            <form id="novitiusAnswerForm" class="novitius-answer-form">
+              <label>Deine Schätzung<div class="novitius-answer-row"><input id="novitiusAnswer" required><span id="novitiusUnit"></span></div></label>
+              <button id="saveNovitiusAnswer" class="primary-button" type="submit">Antwort speichern</button>
+            </form>
+            <div id="novitiusSaved" class="song-answer-saved hidden">✓ Antwort gespeichert <small>Du kannst sie ändern, solange die Frage offen ist.</small></div>
+            <div id="novitiusClosed" class="song-answer-closed hidden">🔒 Antworten geschlossen</div>
+            <p id="novitiusMessage" class="form-error" role="status"></p>
+          </div>
+
+          <div id="novitiusReveal" class="novitius-reveal hidden">
+            <p class="eyebrow">Auflösung</p>
+            <h3 id="novitiusSolution"></h3>
+            <div id="novitiusOwnResult" class="novitius-own-result hidden"></div>
+            <h4>Top 10 dieser Frage</h4>
+            <ol id="novitiusTopTen" class="novitius-top-ten"></ol>
+          </div>
+        </div>
+      </section>
+
       <section class="section-head">
         <div><p class="eyebrow">Machtverhältnisse</p><h2>Live-Rangliste</h2></div>
         <time id="updatedAt">Noch keine Resultate</time>
@@ -168,8 +204,9 @@
     </div>
   </section>
   <canvas id="confetti" aria-hidden="true"></canvas>
-  <script type="module" src="app.js?v=song-2"></script>
-  <script type="module" src="hunt.js?v=song-2"></script>
-  <script type="module" src="oracle.js?v=song-2"></script>
+  <script type="module" src="app.js?v=games-3"></script>
+  <script type="module" src="hunt.js?v=games-3"></script>
+  <script type="module" src="oracle.js?v=games-3"></script>
+  <script type="module" src="novitius.js?v=games-3"></script>
 </body>
 </html>

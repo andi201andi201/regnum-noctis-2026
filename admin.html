@@ -5,7 +5,7 @@
   <meta name="theme-color" content="#08090d"><title>Admin · Regnum Noctis</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=song-2">
+  <link rel="stylesheet" href="styles.css?v=games-3">
 </head>
 <body class="admin-page">
   <div class="stars" aria-hidden="true"></div>
@@ -58,6 +58,44 @@
         </div>
       </section>
 
+      <section id="novitiusAdminPanel" class="panel novitius-admin-panel">
+        <div class="panel-title"><div><p class="eyebrow">Vormittag · ca. 15 Minuten</p><h2>Wer kennt den Novitius?</h2></div><span id="novitiusAdminStatus" class="save-message">Noch nicht gestartet</span></div>
+        <p class="save-message">10 Schätzfragen über Simon · jede Person spielt für ihr Reich.</p>
+        <div class="hunt-admin-actions"><button id="startNovitius" class="primary-button" type="button">Anmeldung starten</button><button id="resetNovitius" class="text-button hidden" type="button">Zurücksetzen</button></div>
+
+        <div id="novitiusControls" class="hidden">
+          <div id="novitiusRegistrationControls" class="novitius-registration-admin">
+            <div><p class="eyebrow">Teilnehmende</p><strong id="novitiusParticipantCount">0 angemeldet</strong></div>
+            <div class="hunt-admin-actions"><button id="openNovitiusRegistration" class="primary-button" type="button">Anmeldung öffnen</button><button id="closeNovitiusRegistration" class="secondary-button" type="button">Anmeldung schliessen</button></div>
+            <div id="novitiusParticipantList" class="novitius-participant-list"></div>
+          </div>
+          <div class="song-round-control">
+            <label>Frage auswählen<select id="novitiusRoundSelect"></select></label>
+            <button id="startNovitiusQuestion" class="secondary-button" type="button">Ausgewählte Frage starten</button>
+            <button id="nextNovitiusQuestion" class="secondary-button" type="button">Nächste Frage starten</button>
+          </div>
+          <div id="novitiusAnswerControls" class="hunt-admin-actions"><button id="openNovitiusAnswers" class="primary-button" type="button">Antworten öffnen</button><button id="closeNovitiusAnswers" class="secondary-button" type="button">Antworten sperren</button><button id="revealNovitiusQuestion" class="primary-button hidden" type="button">Frage auflösen</button></div>
+          <p id="novitiusRoundStatus" class="save-message"></p>
+          <div id="novitiusAdminAnswers" class="novitius-admin-answers"></div>
+          <div id="novitiusFinalisation" class="song-finalisation hidden"><p class="save-message">Die Teamwertung basiert auf dem Durchschnitt aller angemeldeten Personen. Fehlende Antworten zählen mit 0 Punkten.</p><button id="finishNovitius" class="primary-button" type="button">Spiel abschliessen · Punkte vergeben</button><p id="novitiusFinishMessage" class="form-error"></p></div>
+        </div>
+
+        <div class="novitius-question-editor-wrap">
+          <div class="panel-title"><div><p class="eyebrow">Vorbereitung</p><h3>Fragen und Punktebereiche</h3></div></div>
+          <div id="novitiusQuestionList" class="novitius-question-list"></div>
+          <form id="novitiusQuestionForm" class="hidden">
+            <input id="novitiusQuestionNumber" type="hidden">
+            <label>Frage<input id="novitiusQuestionText" type="text" maxlength="180" required></label>
+            <div class="form-grid"><label>Antworttyp<select id="novitiusQuestionType"><option value="number">Zahl</option><option value="time">Uhrzeit</option></select></label><label>Einheit<input id="novitiusQuestionUnit" type="text" maxlength="30" placeholder="z. B. Minuten"></label></div>
+            <label>Simons korrekte Antwort<input id="novitiusCorrectValue" type="number" step="any" placeholder="Kann beim Livetest später eingetragen werden"></label>
+            <fieldset><legend>Maximale Abweichung pro Punktestufe</legend><div id="novitiusThresholdInputs" class="novitius-threshold-inputs"></div></fieldset>
+            <label class="novitius-checkbox"><input id="novitiusLiveAnswer" type="checkbox"> Korrekte Antwort wird erst live ermittelt</label>
+            <div class="hunt-admin-actions"><button class="primary-button" type="submit">Frage speichern</button><button id="cancelNovitiusQuestion" class="secondary-button" type="button">Abbrechen</button></div>
+            <p id="novitiusQuestionMessage" class="form-error"></p>
+          </form>
+        </div>
+      </section>
+
       <section class="panel hunt-control-panel">
         <div><p class="eyebrow">Gemeinsames Kurzspiel</p><h2>Nachtjagd steuern</h2><p id="huntAdminStatus" class="save-message"></p></div>
         <div class="hunt-admin-actions"><button id="startTeamHunt" class="primary-button" type="button">12-Minuten-Jagd starten</button><button id="stopTeamHunt" class="secondary-button hidden" type="button">Jagd beenden</button></div>
@@ -93,6 +131,6 @@
     </div>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="admin.js?v=song-2"></script>
+  <script type="module" src="admin.js?v=games-3"></script>
 </body>
 </html>

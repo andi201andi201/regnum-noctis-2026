@@ -11,6 +11,8 @@ python3 -m http.server 8000
 ```
 
 Danach `http://localhost:8000` beziehungsweise `/admin.html` öffnen. Daten werden im Browser gespeichert.
+Der Adminbereich ist im Demomodus automatisch offen. Sobald Firebase konfiguriert
+ist, wird er ausschliesslich über die dort eingerichteten Admin-Konten geschützt.
 
 ## Firebase einmalig einrichten
 
@@ -45,6 +47,9 @@ Der Workflow in `.github/workflows/pages.yml` veröffentlicht `main` automatisch
 - `songBattleAnswers/{teamId}/song-{nr}`: laufende Teamantworten; in der Teilnehmeransicht wird nur das eigene Reich abonniert
 - `songBattleParticipants/{teamId}`: reserviert die Eingabe für genau eine Person beziehungsweise ein Gerät pro Reich
 - `songBattleAdmin`: geschützte manuelle Bewertungen und interne Song-Battle-Punkte
+- `novitiusParticipants/{uid}`: individuelle Anmeldung mit Name und Reich
+- `novitiusAnswers/{uid}/question-{nr}`: eigene, bis zur Sperre änderbare Antworten
+- `novitiusAdmin/questions`: geschützter Fragenkatalog mit Lösungen und Toleranzbereichen
 - `settings/mode`: `live`, `frozen` oder `final`
 - `admins/{uid}`: Freigabe für Schreibzugriff
 
@@ -86,3 +91,26 @@ ist Platz drei. Das abschliessende Speichern schreibt genau einen
 Resultateintrag mit 5 / 4 / 3 / 2 / 1 Gesamtpunkten. Korrekturen überschreiben
 dieses Resultat und können deshalb keine Punkte doppelt addieren. Laufende
 Antworten und Bewertungen bleiben bis zu einem bewussten Zurücksetzen erhalten.
+
+## Wer kennt den Novitius?
+
+Das Spiel läuft unter `games/novitius-quiz`. Beim Start wird zuerst die
+Anmeldung geöffnet. Jede Person nimmt auf dem eigenen Handy mit ihrem bereits
+gewählten Namen und Reich teil. Sobald Frage 1 gestartet wird, ist die
+Teilnehmerliste geschlossen. Pro Frage kann die Antwort bis zur Sperre beliebig
+geändert werden. Zahlen werden als Zahlen gespeichert; Uhrzeiten werden über
+ein einheitliches Uhrzeitfeld eingegeben und auch über Mitternacht korrekt
+verglichen.
+
+Die zehn Fragen, Simons korrekte Antworten sowie fünf aufsteigende
+Toleranzbereiche für 5 bis 1 Punkt können im Adminbereich bearbeitet werden.
+Beim Live-Test wird die korrekte Antwort erst kurz vor der Auflösung ergänzt.
+Nach dem Sperren veröffentlicht **Frage auflösen** Simons Antwort, die eigene
+Punktzahl und eine Top 10 aller eingegangenen Antworten. Fehlende Antworten
+zählen als null Punkte.
+
+Für die Teamwertung wird der Durchschnitt der persönlichen Gesamtpunkte aller
+angemeldeten Personen eines Reichs verwendet. Dadurch entsteht kein Vorteil
+durch eine grössere Teilnehmerzahl. Gleichstände teilen sich den Platz und die
+zugehörigen Gesamtpunkte. Das erneute Abschliessen nach einer Korrektur ersetzt
+das feste Spielresultat, anstatt weitere Punkte zu addieren.

@@ -17,6 +17,9 @@ export const EMPTY_STATE = {
   songBattleAnswers: {},
   songBattleParticipants: {},
   songBattleAdmin: { evaluations: {}, internalPoints: {} },
+  novitiusParticipants: {},
+  novitiusAnswers: {},
+  novitiusAdmin: { questions: {} },
   oracleAnswers: {},
   oracleQuestions: {}
 };
@@ -36,6 +39,29 @@ export const SONG_BATTLE = {
   durationMinutes: 15,
   songCount: 6,
   description: "Erkennt bei sechs Songs jeweils Titel und Interpret. Pro richtige Angabe gibt es einen internen Punkt."
+};
+
+export const NOVITIUS_GAME = {
+  id: "novitius-quiz",
+  name: "Wer kennt den Novitius?",
+  subjectName: "Simon",
+  round: "Vormittag",
+  durationMinutes: 15,
+  questionCount: 10,
+  description: "Wie gut kennt ihr Simon? Beantwortet zehn Schätzfragen und sammelt für euer Reich möglichst viele Punkte."
+};
+
+export const NOVITIUS_DEFAULT_QUESTIONS = {
+  "question-1": novitiusQuestion(1, "Wie viele Minuten braucht Simon morgens vom Wecker bis zur Haustür?", "number", "Minuten", [1, 3, 5, 8, 12]),
+  "question-2": novitiusQuestion(2, "Wie viele Bier würde Simon an einem langen Abend realistisch trinken?", "number", "Bier", [0, 1, 2, 3, 4]),
+  "question-3": novitiusQuestion(3, "Wie viele Fotos sind ungefähr auf Simons Handy?", "number", "Fotos", [500, 1500, 3000, 5000, 10000]),
+  "question-4": novitiusQuestion(4, "Wie viele Paar Schuhe besitzt Simon?", "number", "Paar", [0, 2, 4, 6, 10]),
+  "question-5": novitiusQuestion(5, "Wie viele Länder hat Simon schon besucht?", "number", "Länder", [0, 2, 4, 6, 10]),
+  "question-6": novitiusQuestion(6, "Wie viele Minuten braucht Simon durchschnittlich zum Duschen?", "number", "Minuten", [1, 2, 4, 6, 10]),
+  "question-7": novitiusQuestion(7, "Wie viele Wecker stellt Simon morgens?", "number", "Wecker", [0, 1, 2, 3, 4]),
+  "question-8": novitiusQuestion(8, "Um welche Uhrzeit kam Simon am spätesten vom Ausgang nach Hause?", "time", "Uhr", [5, 10, 15, 20, 30]),
+  "question-9": novitiusQuestion(9, "Wie viele Raclette-Pfännchen schafft Simon?", "number", "Pfännchen", [0, 1, 2, 3, 4]),
+  "question-10": { ...novitiusQuestion(10, "Wie viele Gummibärchen passen gleichzeitig in Simons Mund?", "number", "Gummibärchen", [0, 1, 2, 3, 5]), liveAnswer: true }
 };
 
 export const GAME_STATUSES = {
@@ -135,6 +161,140 @@ export function finalizeSongBattle(game, evaluations) {
     createdAt: game?.status === "completed" ? game.createdAt : now,
     updatedAt: now
   };
+}
+
+export function buildNovitiusGame(status = "running", existing = null) {
+  if (!Object.hasOwn(GAME_STATUSES, status)) throw new Error("Bitte einen gültigen Spielstatus wählen.");
+  const now = Date.now();
+  const { id, questionCount, ...definition } = NOVITIUS_GAME;
+  return {
+    ...definition,
+    status,
+    registrationOpen: status === "running" && !existing?.participantsLocked,
+    participantsLocked: status === "completed" ? true : !!existing?.participantsLocked,
+    currentQuestion: status === "not-started" ? 0 : Number(existing?.currentQuestion || 0),
+    currentQuestionData: status === "running" ? existing?.currentQuestionData || null : null,
+    answersOpen: status === "running" ? !!existing?.answersOpen : false,
+    revealedQuestions: status === "not-started" ? {} : { ...(existing?.revealedQuestions || {}) },
+    publicReveals: status === "not-started" ? {} : { ...(existing?.publicReveals || {}) },
+    ranking: status === "completed" ? [...(existing?.ranking || [])] : [],
+    placements: status === "completed" ? { ...(existing?.placements || {}) } : {},
+    winnerIds: status === "completed" ? [...(existing?.winnerIds || [])] : [],
+    points: status === "completed" ? { ...(existing?.points || emptyTeamPoints()) } : emptyTeamPoints(),
+    internalPoints: status === "completed" ? { ...(existing?.internalPoints || emptyTeamPoints()) } : {},
+    resultText: status === "completed" ? existing?.resultText || "" : "",
+    source: "novitius-quiz",
+    createdAt: existing?.createdAt || now,
+    updatedAt: now
+  };
+}
+
+export function scoreNovitiusAnswer(question, value) {
+  if (question?.correctValue === null || question?.correctValue === undefined || question?.correctValue === "") return { points: 0, deviation: Infinity };
+  const deviation = novitiusDeviation(question.type, value, question.correctValue);
+  const thresholds = Array.isArray(question.thresholds) ? question.thresholds.map(Number) : [];
+  const index = thresholds.findIndex(limit => Number.isFinite(limit) && deviation <= limit);
+  return { points: index < 0 ? 0 : 5 - index, deviation };
+}
+
+export function novitiusDeviation(type, value, correctValue) {
+  if (type === "time") {
+    const answerMinutes = timeToMinutes(value), correctMinutes = timeToMinutes(correctValue);
+    if (!Number.isFinite(answerMinutes) || !Number.isFinite(correctMinutes)) return Infinity;
+    const direct = Math.abs(answerMinutes - correctMinutes);
+    return Math.min(direct, 1440 - direct);
+  }
+  const answer = Number(value), correct = Number(correctValue);
+  return Number.isFinite(answer) && Number.isFinite(correct) ? Math.abs(answer - correct) : Infinity;
+}
+
+export function buildNovitiusReveal(question, participants = {}, answers = {}) {
+  if (question?.correctValue === null || question?.correctValue === undefined || question?.correctValue === "") throw new Error("Bitte zuerst Simons korrekte Antwort eintragen.");
+  const scored = Object.entries(participants).map(([participantId, participant]) => {
+    const answer = answers?.[participantId] || null;
+    const result = answer ? scoreNovitiusAnswer(question, answer.value) : { points: 0, deviation: Infinity };
+    return { participantId, playerName: participant.playerName, teamId: participant.teamId, value: answer?.value ?? null, ...result };
+  });
+  const submitted = scored.filter(item => item.value !== null).sort((a, b) => a.deviation - b.deviation || a.playerName.localeCompare(b.playerName));
+  let previousDeviation = null, previousPlace = 0;
+  submitted.forEach((item, index) => {
+    item.place = item.deviation === previousDeviation ? previousPlace : index + 1;
+    previousDeviation = item.deviation;
+    previousPlace = item.place;
+  });
+  return {
+    questionNumber: question.number,
+    question: question.text,
+    type: question.type,
+    unit: question.unit || "",
+    correctValue: question.correctValue,
+    thresholds: [...question.thresholds],
+    topTen: submitted.slice(0, 10),
+    scores: Object.fromEntries(scored.map(item => [item.participantId, { points: item.points, deviation: Number.isFinite(item.deviation) ? item.deviation : null, value: item.value }])),
+    revealedAt: Date.now()
+  };
+}
+
+export function finalizeNovitiusGame(game, questions, participants = {}, answers = {}) {
+  if (!Object.keys(participants).length) throw new Error("Es ist noch niemand für das Spiel angemeldet.");
+  const missingSolutions = Array.from({ length: NOVITIUS_GAME.questionCount }, (_, index) => index + 1).filter(number => {
+    const value = questions?.[`question-${number}`]?.correctValue;
+    return value === null || value === undefined || value === "";
+  });
+  if (missingSolutions.length) throw new Error(`Bitte zuerst Simons korrekte Antwort für Frage ${missingSolutions.join(", ")} eintragen.`);
+  const totals = Object.fromEntries(Object.keys(participants).map(id => [id, 0]));
+  for (let number = 1; number <= NOVITIUS_GAME.questionCount; number += 1) {
+    const question = questions?.[`question-${number}`];
+    if (!question) continue;
+    Object.keys(participants).forEach(participantId => {
+      const answer = answers?.[participantId]?.[`question-${number}`];
+      if (answer) totals[participantId] += scoreNovitiusAnswer(question, answer.value).points;
+    });
+  }
+  const teamPlayers = Object.fromEntries(TEAMS.map(team => [team.id, Object.keys(participants).filter(id => participants[id].teamId === team.id)]));
+  const internalPoints = Object.fromEntries(TEAMS.map(team => {
+    const ids = teamPlayers[team.id];
+    const average = ids.length ? ids.reduce((sum, id) => sum + totals[id], 0) / ids.length : 0;
+    return [team.id, Math.round(average * 100) / 100];
+  }));
+  const ranking = suggestedSongBattleRanking(internalPoints, game?.ranking || []);
+  const placements = {}, points = emptyTeamPoints();
+  ranking.forEach((teamId, index) => {
+    const place = index > 0 && internalPoints[teamId] === internalPoints[ranking[index - 1]] ? placements[ranking[index - 1]] : index + 1;
+    placements[teamId] = place;
+    points[teamId] = TEAMS.length + 1 - place;
+  });
+  const now = Date.now();
+  return {
+    ...game,
+    status: "completed",
+    registrationOpen: false,
+    participantsLocked: true,
+    answersOpen: false,
+    currentQuestionData: null,
+    ranking,
+    placements,
+    winnerIds: ranking.filter(id => placements[id] === 1),
+    points,
+    internalPoints,
+    participantTotals: totals,
+    participantCount: Object.keys(participants).length,
+    resultText: ranking.map(teamId => `${placements[teamId]}. ${TEAMS.find(team => team.id === teamId).name} Ø ${internalPoints[teamId]}/50`).join(" · "),
+    source: "novitius-quiz",
+    createdAt: game?.status === "completed" ? game.createdAt : now,
+    updatedAt: now
+  };
+}
+
+function novitiusQuestion(number, text, type, unit, thresholds) {
+  return { number, text, type, unit, correctValue: "", thresholds, liveAnswer: false };
+}
+
+function timeToMinutes(value) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return NaN;
+  const hours = Number(match[1]), minutes = Number(match[2]);
+  return hours >= 0 && hours < 24 && minutes >= 0 && minutes < 60 ? hours * 60 + minutes : NaN;
 }
 
 function emptyTeamPoints() {
