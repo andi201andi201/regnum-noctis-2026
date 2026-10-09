@@ -1,5 +1,5 @@
-import { TEAMS, NOVITIUS_GAME, scoreNovitiusAnswer } from "./data.js?v=challenges-3";
-import { getStore } from "./store.js?v=challenges-3";
+import { TEAMS, NOVITIUS_GAME, scoreNovitiusAnswer } from "./data.js?v=beer-pong-1";
+import { getStore } from "./store.js?v=beer-pong-1";
 import { getPlayerProfile } from "./player.js";
 
 const $ = selector => document.querySelector(selector);

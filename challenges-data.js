@@ -1,4 +1,4 @@
-import { TEAMS } from "./data.js?v=challenges-3";
+import { TEAMS } from "./data.js?v=beer-pong-1";
 
 export const GAME_CHALLENGES = {
   id: "game-challenges",

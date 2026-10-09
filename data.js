@@ -22,6 +22,7 @@ export const EMPTY_STATE = {
   novitiusSubmissions: {},
   novitiusAdmin: { questions: {} },
   huntAdmin: { targets: {} },
+  beerPongAdmin: { drafts: {}, tieBreakRanks: {}, updatedAt: 0 },
   oracleAnswers: {},
   oracleQuestions: {}
 };

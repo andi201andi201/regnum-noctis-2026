@@ -1,7 +1,8 @@
-import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=challenges-3";
-import { getStore } from "./store.js?v=challenges-3";
-import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=challenges-3";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, CHALLENGE_STATIONS, normaliseGameChallengesAdmin, challengeEstimateQuestions, stationById, challengeTimerRemaining, calculateGameChallenges } from "./challenges-data.js?v=challenges-3";
+import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=beer-pong-1";
+import { getStore } from "./store.js?v=beer-pong-1";
+import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=beer-pong-1";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, CHALLENGE_STATIONS, normaliseGameChallengesAdmin, challengeEstimateQuestions, stationById, challengeTimerRemaining, calculateGameChallenges } from "./challenges-data.js?v=beer-pong-1";
+import { BEER_PONG, normaliseBeerPongAdmin, beerPongMatchList, calculateBeerPongGroupTable, beerPongTieGroups } from "./beer-pong-data.js?v=beer-pong-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -10,6 +11,7 @@ let songAnswers = {}, songParticipants = {}, songAdmin = { evaluations: {}, inte
 let songReviewNumber = 1;
 let novitiusAdmin = { questions: {} }, novitiusParticipants = {}, novitiusAnswers = {}, novitiusAdminUnsubscribe = null, novitiusParticipantsUnsubscribe = null, novitiusAnswersUnsubscribe = null, novitiusReviewNumber = 1;
 let challengesAdmin = normaliseGameChallengesAdmin(), challengesAdminUnsubscribe = null, challengeReviewRound = 1, challengeEditorSignature = "", lastChallengeCurrentRound = 0;
+let beerPongAdmin = normaliseBeerPongAdmin(), beerPongAdminUnsubscribe = null;
 let huntAdmin = { targets: normaliseHuntTargets() }, huntAdminUnsubscribe = null, huntTargetSignature = "";
 
 $("#songRoundSelect").innerHTML = Array.from({ length: SONG_BATTLE.songCount }, (_, index) => `<option value="${index + 1}">Song ${index + 1} von ${SONG_BATTLE.songCount}</option>`).join("");
@@ -155,6 +157,33 @@ $("#challengeEstimateEditors").addEventListener("submit", async event => { const
 $("#revealChallengeEstimate").addEventListener("click", async () => { try { await store.revealGameChallengeEstimate(); toast("Schätz-Challenge aufgelöst"); } catch (error) { toast(error.message); } });
 $("#finishGameChallenges").addEventListener("click", async () => { const button = $("#finishGameChallenges"); button.disabled = true; $("#challengeFinishMessage").textContent = ""; try { await store.finishGameChallenges(); toast("Game Challenges abgeschlossen · Tagespunkte aktualisiert"); } catch (error) { $("#challengeFinishMessage").textContent = error.message; } finally { button.disabled = false; } });
 
+$("#startBeerPong").addEventListener("click", async () => { if (!confirm("Beer-Pong-Turnier jetzt starten und den Turniermodus auf dem Grossbildschirm aktivieren?")) return; await withDisabled($("#startBeerPong"), async () => { await store.startBeerPong(); toast("Beer-Pong-Turnier gestartet"); }); });
+$("#resetBeerPong").addEventListener("click", async () => { const running = currentState?.games?.[BEER_PONG.id]?.status === "running"; const message = running ? "Beer-Pong-Turnier abbrechen? Die Turnieransicht verschwindet sofort. Alle Matchresultate dieses Turniers werden gelöscht." : "Beer-Pong-Turnier vollständig zurücksetzen? Platzierung und Tagespunkte werden entfernt."; if (!confirm(message)) return; await withDisabled($("#resetBeerPong"), async () => { await store.resetBeerPong(); toast(running ? "Beer-Pong-Turnier abgebrochen" : "Beer-Pong-Turnier zurückgesetzt"); }); });
+$("#beerPongMatches").addEventListener("click", async event => {
+  const start = event.target.closest("button[data-bp-start]");
+  if (start) { try { await store.startBeerPongMatch(start.dataset.bpStart); toast("Match läuft · TV aktualisiert"); } catch (error) { beerPongError(error); } return; }
+  const publish = event.target.closest("button[data-bp-publish]");
+  if (publish) { try { await store.publishBeerPongMatch(publish.dataset.bpPublish); toast("Matchresultat veröffentlicht"); } catch (error) { beerPongError(error); } }
+});
+$("#beerPongMatches").addEventListener("input", event => {
+  const form = event.target.closest("form[data-bp-match]"); if (!form || !event.target.matches("input[data-bp-cups]")) return;
+  const a = Number(form.elements.cupsHitA.value), b = Number(form.elements.cupsHitB.value);
+  if (a !== b && Number.isFinite(a) && Number.isFinite(b)) form.elements.winnerId.value = a > b ? form.dataset.teamA : form.dataset.teamB;
+});
+$("#beerPongMatches").addEventListener("submit", async event => {
+  const form = event.target.closest("form[data-bp-match]"); if (!form) return; event.preventDefault();
+  try { await store.saveBeerPongMatch(form.dataset.bpMatch, { cupsHitA: form.elements.cupsHitA.value, cupsHitB: form.elements.cupsHitB.value, winnerId: form.elements.winnerId.value, decidedBy: form.elements.cupsHitA.value === form.elements.cupsHitB.value ? "tiebreak" : "cups" }); toast("Matchresultat gespeichert · noch nicht öffentlich"); }
+  catch (error) { beerPongError(error); }
+});
+$("#saveBeerPongTieBreak").addEventListener("click", async () => { const ranks = {}; $("#beerPongTieInputs").querySelectorAll("select[data-bp-tie-team]").forEach(select => { ranks[select.dataset.bpTieTeam] = Number(select.value); }); try { await store.saveBeerPongTieBreakRanks(ranks); toast("Stechen gespeichert"); } catch (error) { beerPongError(error); } });
+$("#evaluateBeerPongGroups").addEventListener("click", async () => { try { await store.evaluateBeerPongGroups(); toast("Gruppenphase ausgewertet"); } catch (error) { beerPongError(error); } });
+$("#releaseBeerPongSemifinals").addEventListener("click", async () => { try { await store.releaseBeerPongSemifinals(); toast("Halbfinalpaarungen freigegeben"); } catch (error) { beerPongError(error); } });
+$("#releaseBeerPongFinal").addEventListener("click", async () => { try { await store.releaseBeerPongFinal(); toast("Final Battle freigegeben"); } catch (error) { beerPongError(error); } });
+$("#finishBeerPong").addEventListener("click", async () => { try { await store.finishBeerPong(); toast("Beer-Pong-Turnier abgeschlossen · Tagespunkte verbucht"); } catch (error) { beerPongError(error); } });
+$("#resetBeerPongFinal").addEventListener("click", async () => { if (!confirm("Finale zurücksetzen? Ein vorhandenes Finalresultat und die Turnierpunkte werden entfernt.")) return; try { await store.resetBeerPongFinal(); toast("Finale zurückgesetzt"); } catch (error) { beerPongError(error); } });
+$("#resetBeerPongKnockouts").addEventListener("click", async () => { if (!confirm("Gesamte KO-Phase zurücksetzen? Halbfinal- und Finalresultate sowie Turnierpunkte werden entfernt. Die Gruppenspiele bleiben erhalten.")) return; try { await store.resetBeerPongKnockouts(); toast("KO-Phase zurückgesetzt"); } catch (error) { beerPongError(error); } });
+$("#revealRegnumWinner").addEventListener("click", async () => { if (!confirm("Jetzt den Gesamtsieger von Regnum Noctis auf allen Seiten enthüllen?")) return; try { await store.revealRegnumWinner(); toast("Gesamtsieger enthüllt"); } catch (error) { beerPongError(error); } });
+
 $("#scoreInputs").innerHTML = TEAMS.map(team => `<label class="score-field" style="--team:${team.color}"><span><i></i>${team.name}</span><input id="score-${team.id}" type="number" inputmode="numeric" value="0" step="1" required></label>`).join("");
 if (store.demo) setAccess(true);
 else {
@@ -237,6 +266,10 @@ $("#adminResults").addEventListener("click", async event => {
     if (confirm("Game Challenges vollständig zurücksetzen? Resultate und Punkte werden entfernt; die Schätzfragen bleiben erhalten.")) { await store.resetGameChallenges(); toast("Game Challenges zurückgesetzt"); }
     return;
   }
+  if (action === "delete" && id === BEER_PONG.id) {
+    if (confirm("Beer-Pong-Turnier vollständig zurücksetzen? Matchresultate, Platzierung und Tagespunkte werden entfernt.")) { await store.resetBeerPong(); toast("Beer-Pong-Turnier zurückgesetzt"); }
+    return;
+  }
   if (action === "delete" && confirm("Dieses Resultat wirklich löschen? Die Rangliste wird sofort neu berechnet.")) { await store.deleteGame(id); toast("Resultat gelöscht"); if (editingId === id) resetForm(); }
 });
 
@@ -244,6 +277,7 @@ function renderAdmin(state) {
   renderSongBattleAdmin(state);
   renderNovitiusAdmin(state);
   renderGameChallengesAdmin(state);
+  renderBeerPongAdmin(state);
   renderHuntAdmin(state);
   const mode = state.settings.mode || "live";
   document.querySelectorAll("[data-mode]").forEach(button => button.classList.toggle("active", button.dataset.mode === mode));
@@ -252,6 +286,79 @@ function renderAdmin(state) {
   $("#adminResults").innerHTML = games.map(game => `<article class="admin-result"><div><span>${formatTime(game.createdAt, true)}</span><strong>${escapeHtml(game.name)}</strong><small>${escapeHtml(game.round || game.resultText || "")}</small></div><div class="admin-actions"><button data-action="edit" data-id="${game.id}">Bearbeiten</button><button class="danger" data-action="delete" data-id="${game.id}">Löschen</button></div></article>`).join("");
   $("#adminEmpty").classList.toggle("hidden", games.length > 0);
 }
+
+function renderBeerPongAdmin(state) {
+  const game = state?.games?.[BEER_PONG.id];
+  const status = game?.status || "not-started", running = status === "running", completed = status === "completed";
+  $("#beerPongAdminStatus").textContent = GAME_STATUSES[status] || GAME_STATUSES["not-started"];
+  $("#startBeerPong").classList.toggle("hidden", status !== "not-started");
+  $("#beerPongPrestart").classList.toggle("hidden", status !== "not-started");
+  $("#resetBeerPong").classList.toggle("hidden", status === "not-started");
+  $("#resetBeerPong").classList.toggle("abort-action", running);
+  $("#resetBeerPong").textContent = running ? "Turnier abbrechen" : "Zurücksetzen";
+  $("#beerPongControls").classList.toggle("hidden", status === "not-started");
+  if (status === "not-started") return;
+
+  const phaseLabels = { groups: "Gruppenphase", semifinals: "Halbfinals", final: "The Final Battle", completed: "Turnier beendet" };
+  const phaseHelp = {
+    groups: "Matches starten, Resultate speichern und danach einzeln veröffentlichen.",
+    semifinals: "Die Halbfinalpaarungen basieren auf der freigegebenen Gruppenrangliste.",
+    final: "Zehn Becher pro Seite · ohne Zeitlimit.",
+    completed: "Die Turnierpunkte sind einmalig in der Tagesrangliste verbucht. Korrekturen bleiben über die Rücksetzbuttons möglich."
+  };
+  $("#beerPongPhase").textContent = phaseLabels[game.phase] || phaseLabels.groups;
+  $("#beerPongPhaseHelp").textContent = phaseHelp[game.phase] || "";
+
+  const matches = beerPongMatchList(game);
+  $("#beerPongMatches").innerHTML = matches.map(match => renderBeerPongMatchAdmin(game, match, running)).join("");
+
+  const table = calculateBeerPongGroupTable(game, beerPongAdmin.tieBreakRanks);
+  $("#beerPongGroupTable").innerHTML = `<div class="beer-pong-table-head"><span>#</span><span>Reich</span><span>Sp</span><span>S</span><span>P</span><span>Diff.</span><span>Treffer</span></div>${table.standings.map(row => {
+    const team = teamById(row.teamId);
+    return `<div class="beer-pong-table-row" style="--team:${team?.color || "#888"}"><b>${row.place}</b><strong>${team?.marker || ""} ${escapeHtml(team?.name || row.teamId)}</strong><span>${row.played}</span><span>${row.wins}</span><em>${row.groupPoints}</em><span>${signedNumber(row.cupDifference)}</span><span>${row.cupsHit}</span></div>`;
+  }).join("")}`;
+
+  const groupMatches = matches.filter(match => match.stage === "group"), allGroupsPublished = groupMatches.length === 5 && groupMatches.every(match => match.published && match.status === "completed");
+  const tieGroups = allGroupsPublished && !game.groupEvaluated ? beerPongTieGroups(game) : [];
+  $("#beerPongTieBreak").classList.toggle("hidden", !tieGroups.length);
+  $("#beerPongTieInputs").innerHTML = tieGroups.map((teamIds, groupIndex) => `<fieldset><legend>Stechen ${groupIndex + 1}: ${teamIds.map(id => teamById(id)?.name || id).join(" / ")}</legend>${teamIds.map(id => {
+    const team = teamById(id), selected = Number(beerPongAdmin.tieBreakRanks?.[id] || 0);
+    return `<label style="--team:${team?.color || "#888"}"><span>${team?.marker || ""} ${escapeHtml(team?.name || id)}</span><select data-bp-tie-team="${id}"><option value="">Rang wählen</option>${teamIds.map((_, index) => `<option value="${index + 1}" ${selected === index + 1 ? "selected" : ""}>${index + 1}. im Stechen</option>`).join("")}</select></label>`;
+  }).join("")}</fieldset>`).join("");
+
+  const semis = [game.matches?.["semi-1"], game.matches?.["semi-2"]], semisPublished = semis.every(match => match?.published && match.status === "completed");
+  const finalPublished = game.matches?.final?.published && game.matches.final.status === "completed";
+  $("#evaluateBeerPongGroups").classList.toggle("hidden", !running || game.phase !== "groups" || !allGroupsPublished || !!game.groupEvaluated);
+  $("#releaseBeerPongSemifinals").classList.toggle("hidden", !running || !game.groupEvaluated || !!game.semifinalsReleased);
+  $("#releaseBeerPongFinal").classList.toggle("hidden", !running || !game.semifinalsReleased || !semisPublished || !!game.finalReleased);
+  $("#finishBeerPong").classList.toggle("hidden", !running || !game.finalReleased || !finalPublished);
+  $("#resetBeerPongFinal").classList.toggle("hidden", !game.finalReleased);
+  $("#resetBeerPongKnockouts").classList.toggle("hidden", !game.semifinalsReleased);
+  $("#beerPongRevealSection").classList.toggle("hidden", !completed);
+  $("#revealRegnumWinner").classList.toggle("hidden", !!game.finalReveal);
+  const revealHeading = $("#beerPongRevealSection h3");
+  if (revealHeading) revealHeading.textContent = game.finalReveal ? "✓ Gesamtsieger wurde enthüllt" : "Die Tagesrangliste bleibt auf dem TV eingefroren";
+}
+
+function renderBeerPongMatchAdmin(game, match, running) {
+  const teamA = teamById(match.teamA), teamB = teamById(match.teamB), draft = beerPongAdmin.drafts?.[match.id], result = draft || (match.published ? match : null);
+  const phaseActive = match.stage === "group" ? game.phase === "groups" : match.stage === "semifinal" ? game.phase === "semifinals" : game.phase === "final";
+  const editable = running && phaseActive && (match.status === "running" || match.published);
+  const status = match.published ? "Veröffentlicht" : draft ? "Gespeichert · nicht öffentlich" : match.status === "running" ? "Läuft" : "Bereit";
+  const max = Number(match.cupsPerSide || 6), equal = result && Number(result.cupsHitA) === Number(result.cupsHitB);
+  return `<article class="beer-pong-match-card ${match.status === "running" ? "is-live" : ""} ${match.published ? "is-published" : ""}">
+    <header><div><span>${escapeHtml(match.label)}</span><strong>${match.stage === "final" ? "THE FINAL BATTLE" : match.stage === "semifinal" ? "HALBFINALE" : "GRUPPENSPIEL"}</strong></div><em ${match.status === "running" && !match.published && match.stage !== "final" ? `data-bp-admin-ends="${Number(match.endsAt || 0)}"` : ""}>${match.status === "running" && !match.published && match.stage !== "final" ? `Läuft · ${beerPongCountdown(match.endsAt)}` : status}</em></header>
+    <div class="beer-pong-versus"><div style="--team:${teamA?.color || "#888"}"><img src="${teamA?.logo || ""}" alt=""><b>${teamA?.marker || ""} ${escapeHtml(teamA?.name || match.teamA || "Offen")}</b></div><span>VS</span><div style="--team:${teamB?.color || "#888"}"><img src="${teamB?.logo || ""}" alt=""><b>${teamB?.marker || ""} ${escapeHtml(teamB?.name || match.teamB || "Offen")}</b></div></div>
+    ${running && phaseActive && match.status === "pending" ? `<button class="primary-button" type="button" data-bp-start="${match.id}">Match starten${match.stage === "final" ? "" : " · 06:00"}</button>` : ""}
+    ${editable ? `<form data-bp-match="${match.id}" data-team-a="${match.teamA}" data-team-b="${match.teamB}"><div class="beer-pong-score-inputs"><label>${escapeHtml(teamA?.name || match.teamA)}<input name="cupsHitA" data-bp-cups type="number" min="0" max="${max}" step="1" value="${result?.cupsHitA ?? ""}" required><small>getroffene Becher</small></label><b>:</b><label>${escapeHtml(teamB?.name || match.teamB)}<input name="cupsHitB" data-bp-cups type="number" min="0" max="${max}" step="1" value="${result?.cupsHitB ?? ""}" required><small>getroffene Becher</small></label></div><label>Sieger bestätigen<select name="winnerId" required><option value="">Bitte wählen</option><option value="${match.teamA}" ${result?.winnerId === match.teamA ? "selected" : ""}>${teamA?.marker || ""} ${escapeHtml(teamA?.name || match.teamA)}</option><option value="${match.teamB}" ${result?.winnerId === match.teamB ? "selected" : ""}>${teamB?.marker || ""} ${escapeHtml(teamB?.name || match.teamB)}</option></select></label>${equal ? '<p class="beer-pong-equal-note">Gleiche Trefferzahl: Sieger nach dem Entscheidungswurf manuell bestätigen.</p>' : ""}<div class="hunt-admin-actions"><button class="secondary-button" type="submit">Resultat speichern</button>${draft ? `<button class="primary-button" type="button" data-bp-publish="${match.id}">${match.published ? "Korrektur veröffentlichen" : "Resultat veröffentlichen"}</button>` : ""}</div></form>` : match.published ? `<div class="beer-pong-public-score"><strong>${Number(match.cupsHitA)} : ${Number(match.cupsHitB)}</strong><span>Sieger: ${escapeHtml(teamById(match.winnerId)?.name || match.winnerId)}</span></div>` : ""}
+  </article>`;
+}
+
+function beerPongError(error) { $("#beerPongMessage").textContent = error.message; toast(error.message); }
+function teamById(id) { return TEAMS.find(team => team.id === id); }
+function signedNumber(value) { const number = Number(value || 0); return number > 0 ? `+${number}` : String(number); }
+function beerPongCountdown(endsAt) { const seconds = Math.max(0, Math.ceil((Number(endsAt || 0) - Date.now()) / 1000)); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
+setInterval(() => document.querySelectorAll("[data-bp-admin-ends]").forEach(element => { element.textContent = `Läuft · ${beerPongCountdown(element.dataset.bpAdminEnds)}`; }), 500);
 
 function renderGameChallengesAdmin(state) {
   const game = state?.games?.[GAME_CHALLENGES.id], status = game?.status || "not-started", running = status === "running", completed = status === "completed";
@@ -565,7 +672,7 @@ function renderHuntAdmin(state) {
   $("#huntAdminHistory").innerHTML = [...finds].sort((a, b) => b.createdAt - a.createdAt).map(find => { const team = TEAMS.find(item => item.id === find.teamId); const target = huntAdmin.targets?.[find.targetId]; return `<div style="--team:${team?.color || "#888"}"><time>${formatTime(find.createdAt)}</time><span><strong>Gegenstand ${find.targetNumber}</strong> · ${escapeHtml(target?.internalName || find.targetId)}<small>von ${escapeHtml(find.playerName)} · ${team?.marker || ""} ${team?.name || find.teamId}${find.manual ? " · manuell" : ""}</small></span><b>+${Number(find.awardedPoints || 1)}</b></div>`; }).join("") || '<p class="empty-state">Noch keine Funde.</p>';
 }
 
-function loadEdit(id) { if (id === SONG_BATTLE.id) { songReviewNumber = 1; renderSongBattleAdmin(currentState); $("#songBattleAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === NOVITIUS_GAME.id) { novitiusReviewNumber = 1; renderNovitiusAdmin(currentState); $("#novitiusAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === GAME_CHALLENGES.id) { challengeReviewRound = 1; renderGameChallengesAdmin(currentState); $("#gameChallengesAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } const game = currentState.games[id]; if (!game) return; editingId = id; $("#formTitle").textContent = "Resultat korrigieren"; $("#cancelEdit").classList.remove("hidden"); $("#gameName").value = game.name || ""; $("#roundName").value = game.round || ""; $("#resultText").value = game.resultText || ""; TEAMS.forEach(team => $(`#score-${team.id}`).value = Number(game.points?.[team.id] || 0)); $("#resultForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
+function loadEdit(id) { if (id === SONG_BATTLE.id) { songReviewNumber = 1; renderSongBattleAdmin(currentState); $("#songBattleAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === NOVITIUS_GAME.id) { novitiusReviewNumber = 1; renderNovitiusAdmin(currentState); $("#novitiusAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === GAME_CHALLENGES.id) { challengeReviewRound = 1; renderGameChallengesAdmin(currentState); $("#gameChallengesAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === BEER_PONG.id) { renderBeerPongAdmin(currentState); $("#beerPongAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } const game = currentState.games[id]; if (!game) return; editingId = id; $("#formTitle").textContent = "Resultat korrigieren"; $("#cancelEdit").classList.remove("hidden"); $("#gameName").value = game.name || ""; $("#roundName").value = game.round || ""; $("#resultText").value = game.resultText || ""; TEAMS.forEach(team => $(`#score-${team.id}`).value = Number(game.points?.[team.id] || 0)); $("#resultForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
 function resetForm() { editingId = null; $("#resultForm").reset(); TEAMS.forEach(team => $(`#score-${team.id}`).value = 0); $("#formTitle").textContent = "Spielresultat erfassen"; $("#cancelEdit").classList.add("hidden"); $("#saveMessage").textContent = ""; }
 function toast(message) { $("#toast").textContent = message; $("#toast").classList.add("show"); setTimeout(() => $("#toast").classList.remove("show"), 2200); }
 async function withDisabled(button, action) { button.disabled = true; try { await action(); } catch (error) { toast(`Speichern fehlgeschlagen: ${error.message}`); } finally { button.disabled = false; } }
@@ -578,6 +685,7 @@ function setAccess(granted) {
   if (granted && !novitiusParticipantsUnsubscribe) novitiusParticipantsUnsubscribe = store.subscribeNovitiusParticipants(value => { novitiusParticipants = value; if (currentState) renderNovitiusAdmin(currentState); });
   if (granted && !novitiusAnswersUnsubscribe) novitiusAnswersUnsubscribe = store.subscribeNovitiusAnswers(value => { novitiusAnswers = value; if (currentState) renderNovitiusAdmin(currentState); });
   if (granted && !challengesAdminUnsubscribe) challengesAdminUnsubscribe = store.subscribeGameChallengesAdmin(value => { challengesAdmin = value; challengeEditorSignature = ""; if (currentState) renderGameChallengesAdmin(currentState); });
+  if (granted && !beerPongAdminUnsubscribe) beerPongAdminUnsubscribe = store.subscribeBeerPongAdmin(value => { beerPongAdmin = value; if (currentState) renderBeerPongAdmin(currentState); });
   if (granted && !huntAdminUnsubscribe) huntAdminUnsubscribe = store.subscribeHuntAdmin(value => { huntAdmin = value; huntTargetSignature = ""; if (currentState) renderHuntAdmin(currentState); });
   if (!granted && songAnswersUnsubscribe) { songAnswersUnsubscribe(); songAnswersUnsubscribe = null; songAnswers = {}; }
   if (!granted && songParticipantsUnsubscribe) { songParticipantsUnsubscribe(); songParticipantsUnsubscribe = null; songParticipants = {}; }
@@ -586,6 +694,7 @@ function setAccess(granted) {
   if (!granted && novitiusParticipantsUnsubscribe) { novitiusParticipantsUnsubscribe(); novitiusParticipantsUnsubscribe = null; novitiusParticipants = {}; }
   if (!granted && novitiusAnswersUnsubscribe) { novitiusAnswersUnsubscribe(); novitiusAnswersUnsubscribe = null; novitiusAnswers = {}; }
   if (!granted && challengesAdminUnsubscribe) { challengesAdminUnsubscribe(); challengesAdminUnsubscribe = null; challengesAdmin = normaliseGameChallengesAdmin(); challengeEditorSignature = ""; }
+  if (!granted && beerPongAdminUnsubscribe) { beerPongAdminUnsubscribe(); beerPongAdminUnsubscribe = null; beerPongAdmin = normaliseBeerPongAdmin(); }
   if (!granted && huntAdminUnsubscribe) { huntAdminUnsubscribe(); huntAdminUnsubscribe = null; huntAdmin = { targets: normaliseHuntTargets() }; huntTargetSignature = ""; }
 }
 function humanAuthError(code) { return ({ "auth/invalid-credential": "E-Mail oder Passwort ist falsch.", "auth/too-many-requests": "Zu viele Versuche. Bitte kurz warten.", "auth/network-request-failed": "Keine Verbindung. Bitte Internet prüfen." })[code] || "Login fehlgeschlagen."; }

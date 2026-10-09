@@ -1,7 +1,7 @@
-import { TEAMS, formatTime } from "./data.js?v=challenges-3";
-import { getStore } from "./store.js?v=challenges-3";
+import { TEAMS, formatTime } from "./data.js?v=beer-pong-1";
+import { getStore } from "./store.js?v=beer-pong-1";
 import { getPlayerProfile } from "./player.js";
-import { HUNT_POINTS_PER_OBJECT, huntFinds, huntProgress } from "./hunt-data.js?v=challenges-3";
+import { HUNT_POINTS_PER_OBJECT, huntFinds, huntProgress } from "./hunt-data.js?v=beer-pong-1";
 
 const $ = selector => document.querySelector(selector);
 const DETECTION_HOLD_MS = 950;

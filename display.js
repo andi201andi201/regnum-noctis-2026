@@ -1,7 +1,8 @@
-import { TEAMS, totalsFromGames, formatTime, NOVITIUS_GAME } from "./data.js?v=challenges-3";
-import { getStore } from "./store.js?v=challenges-3";
-import { huntFinds, huntProgress } from "./hunt-data.js?v=challenges-3";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, stationById, challengeTimerRemaining } from "./challenges-data.js?v=challenges-3";
+import { TEAMS, totalsFromGames, formatTime, NOVITIUS_GAME } from "./data.js?v=beer-pong-1";
+import { getStore } from "./store.js?v=beer-pong-1";
+import { huntFinds, huntProgress } from "./hunt-data.js?v=beer-pong-1";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, stationById, challengeTimerRemaining } from "./challenges-data.js?v=beer-pong-1";
+import { BEER_PONG, beerPongMatchList, calculateBeerPongGroupTable } from "./beer-pong-data.js?v=beer-pong-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -22,8 +23,68 @@ function render(state) {
   if (latest) { const team = TEAMS.find(item => item.id === latest.teamId); $("#displayLastFind").innerHTML = `<span>Letzter Fund · ${formatTime(latest.createdAt)}</span><strong>Gegenstand ${latest.targetNumber} gefunden</strong><small>von ${escapeHtml(latest.playerName)} · ${team?.marker || ""} ${team?.name || latest.teamId}</small>`; }
   renderNovitius(state);
   renderChallenges(state);
+  renderBeerPong(state, totals);
   $("#displayUpdated").textContent = state.settings.updatedAt ? `Stand ${formatTime(state.settings.updatedAt)}` : "";
 }
+
+function renderBeerPong(state, totals) {
+  const game = state.games?.[BEER_PONG.id], tournamentVisible = game?.status === "running" || (game?.status === "completed" && !game.finalReveal);
+  const winnerVisible = game?.status === "completed" && game.finalReveal;
+  document.body.classList.toggle("beer-pong-active", tournamentVisible);
+  document.body.classList.toggle("regnum-winner-active", winnerVisible);
+  $("#displayBeerPong").classList.toggle("hidden", !tournamentVisible);
+  $("#displayRegnumWinner").classList.toggle("hidden", !winnerVisible);
+  if (tournamentVisible) $("#displayBeerPong").innerHTML = beerPongArena(game);
+  if (winnerVisible) renderRegnumWinner(totals);
+}
+
+function beerPongArena(game) {
+  if (game.status === "completed") {
+    const champion = teamById(game.ranking?.[0]);
+    return `<div class="beer-pong-arena-head"><div><p class="eyebrow">Battle of the Five Realms</p><h1>🍺 Beer Pong</h1></div><span>Turnier beendet</span></div><div class="beer-pong-champion" style="--team:${champion?.color || "#d9b665"}"><p>Turniersieger</p><img src="${champion?.logo || ""}" alt=""><h2>🏆 ${escapeHtml(champion?.name || "")}</h2><ol>${(game.ranking || []).map((id, index) => { const team = teamById(id); return `<li style="--team:${team?.color || "#888"}"><b>${index + 1}. ${team?.marker || ""} ${escapeHtml(team?.name || id)}</b><span>+${Number(game.points?.[id] || 0)}</span></li>`; }).join("")}</ol><strong>Die Tagesrangliste bleibt verborgen</strong><small>Wartet auf die Enthüllung des Regnum-Noctis-Siegers …</small></div>`;
+  }
+  const phase = game.phase || "groups";
+  return `<div class="beer-pong-arena-head"><div><p class="eyebrow">Battle of the Five Realms</p><h1>🍺 Beer Pong</h1></div><span>${phase === "groups" ? "Gruppenphase" : phase === "semifinals" ? "Halbfinals" : "The Final Battle"}</span></div>${phase === "groups" ? beerPongGroups(game) : phase === "semifinals" ? beerPongSemifinals(game) : beerPongFinal(game)}`;
+}
+
+function beerPongGroups(game) {
+  const matches = beerPongMatchList(game).filter(match => match.stage === "group"), table = calculateBeerPongGroupTable(game);
+  const rounds = [1, 2, 3, 4].map(round => `<section><h3>Runde ${round}</h3>${matches.filter(match => Number(match.round) === round).map(renderBeerPongDisplayMatch).join("")}</section>`).join("");
+  return `<div class="beer-pong-groups"><div class="beer-pong-schedule"><h2>Spielplan</h2><div>${rounds}</div></div><div class="beer-pong-tv-table"><h2>Gruppenrangliste</h2><header><span>#</span><span>Reich</span><span>Sp</span><span>P</span><span>Diff.</span></header>${table.standings.map(row => { const team = teamById(row.teamId); return `<div style="--team:${team?.color || "#888"}"><b>${row.place}</b><strong>${team?.marker || ""} ${escapeHtml(team?.name || row.teamId)}</strong><span>${row.played}</span><em>${row.groupPoints}</em><span>${signedNumber(row.cupDifference)}</span></div>`; }).join("")}</div></div>`;
+}
+
+function beerPongSemifinals(game) {
+  const semi1 = game.matches?.["semi-1"], semi2 = game.matches?.["semi-2"];
+  return `<div class="beer-pong-knockout"><p class="beer-pong-callout">Vier Reiche. Zwei Duelle. Ein Finale.</p><div class="beer-pong-semi-grid">${[semi1, semi2].filter(Boolean).map(renderBeerPongDisplayMatch).join("")}</div><div class="beer-pong-final-placeholder"><span>THE FINAL BATTLE</span><strong>${[semi1, semi2].every(match => match?.published) ? "Bereit zur Freigabe" : "Die Sieger ziehen ins Finale ein"}</strong></div></div>`;
+}
+
+function beerPongFinal(game) {
+  const final = game.matches?.final, teamA = teamById(final?.teamA), teamB = teamById(final?.teamB);
+  return `<div class="beer-pong-final-stage"><p class="beer-pong-callout">THE FINAL BATTLE</p><div class="beer-pong-finalists"><div style="--team:${teamA?.color || "#888"}"><img src="${teamA?.logo || ""}" alt=""><strong>${escapeHtml(teamA?.name || "")}</strong></div><b>VS</b><div style="--team:${teamB?.color || "#888"}"><img src="${teamB?.logo || ""}" alt=""><strong>${escapeHtml(teamB?.name || "")}</strong></div></div>${renderBeerPongFinalStatus(final)}<div class="beer-pong-semi-recap">${[game.matches?.["semi-1"], game.matches?.["semi-2"]].filter(Boolean).map(renderBeerPongDisplayMatch).join("")}</div></div>`;
+}
+
+function renderBeerPongFinalStatus(match) {
+  if (match?.published) return `<div class="beer-pong-final-result"><span>Finalresultat</span><strong>${Number(match.cupsHitA)} : ${Number(match.cupsHitB)}</strong><em>🏆 ${escapeHtml(teamById(match.winnerId)?.name || match.winnerId)}</em></div>`;
+  if (match?.status === "running") return `<div class="beer-pong-final-result is-live"><span>● LIVE · 10 Becher · kein Zeitlimit</span><strong>Das Finale läuft</strong></div>`;
+  return `<div class="beer-pong-final-result"><span>10 Becher · kein Zeitlimit</span><strong>Bereit für das Finale</strong></div>`;
+}
+
+function renderBeerPongDisplayMatch(match) {
+  const a = teamById(match.teamA), b = teamById(match.teamB);
+  const result = match.published ? `<strong>${Number(match.cupsHitA)} : ${Number(match.cupsHitB)}</strong><em>🏆 ${escapeHtml(teamById(match.winnerId)?.name || match.winnerId)}</em>` : match.status === "running" ? `<strong class="beer-pong-live" data-bp-ends="${Number(match.endsAt || 0)}">${match.stage === "final" ? "LIVE" : beerPongCountdown(match.endsAt)}</strong><em>● Match läuft</em>` : `<strong>– : –</strong><em>Bereit</em>`;
+  return `<article class="beer-pong-tv-match ${match.status === "running" ? "is-live" : ""}"><span>${escapeHtml(match.label)}</span><div><b style="--team:${a?.color || "#888"}">${a?.marker || ""} ${escapeHtml(a?.name || match.teamA || "Offen")}</b>${result}<b style="--team:${b?.color || "#888"}">${b?.marker || ""} ${escapeHtml(b?.name || match.teamB || "Offen")}</b></div></article>`;
+}
+
+function renderRegnumWinner(totals) {
+  const best = Math.max(...TEAMS.map(team => Number(totals[team.id] || 0))), winners = TEAMS.filter(team => Number(totals[team.id] || 0) === best);
+  $("#displayRegnumWinner").innerHTML = `<div class="regnum-winner-rays"></div><p class="eyebrow">Das Schicksal ist entschieden</p><h1>${winners.length > 1 ? "Herrscher des Regnum Noctis 2026" : "Herrscher des Regnum Noctis 2026"}</h1><div class="regnum-winner-crests">${winners.map(team => `<article style="--team:${team.color}"><img src="${team.logo}" alt=""><h2>${team.marker} ${escapeHtml(team.name)}</h2><strong>${best} Punkte</strong></article>`).join("")}</div><p>Die Nacht gehört euch.</p>`;
+}
+
+function beerPongCountdown(endsAt) { const seconds = Math.max(0, Math.ceil((Number(endsAt || 0) - Date.now()) / 1000)); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
+function updateBeerPongTimers() { document.querySelectorAll("[data-bp-ends]").forEach(element => { element.textContent = beerPongCountdown(element.dataset.bpEnds); }); }
+setInterval(updateBeerPongTimers, 500);
+function teamById(id) { return TEAMS.find(team => team.id === id); }
+function signedNumber(value) { const number = Number(value || 0); return number > 0 ? `+${number}` : String(number); }
 
 function renderChallenges(state) {
   const game = state.games?.[GAME_CHALLENGES.id], visible = game?.status === "running";

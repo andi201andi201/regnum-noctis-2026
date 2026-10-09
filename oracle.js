@@ -1,6 +1,6 @@
-import { TEAMS } from "./data.js?v=challenges-3";
+import { TEAMS } from "./data.js?v=beer-pong-1";
 import { getPlayerProfile } from "./player.js";
-import { getStore } from "./store.js?v=challenges-3";
+import { getStore } from "./store.js?v=beer-pong-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();

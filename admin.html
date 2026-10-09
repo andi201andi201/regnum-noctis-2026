@@ -5,7 +5,7 @@
   <meta name="theme-color" content="#08090d"><title>Admin · Regnum Noctis</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=challenges-3">
+  <link rel="stylesheet" href="styles.css?v=beer-pong-1">
 </head>
 <body class="admin-page">
   <div class="stars" aria-hidden="true"></div>
@@ -108,6 +108,37 @@
         </div>
       </section>
 
+      <section id="beerPongAdminPanel" class="panel beer-pong-admin-panel">
+        <div class="panel-title"><div><p class="eyebrow">Samstagabend · ca. 21:45 Uhr</p><h2>🍺 Beer Pong – Battle of the Five Realms</h2></div><span id="beerPongAdminStatus" class="save-message">Noch nicht gestartet</span></div>
+        <p class="save-message">Fünf Gruppenspiele, zwei Halbfinals und die Final Battle. Resultate werden erst nach eurer Freigabe öffentlich.</p>
+        <div class="hunt-admin-actions"><button id="startBeerPong" class="primary-button" type="button">Beer-Pong-Turnier starten</button><button id="resetBeerPong" class="text-button hidden" type="button">Zurücksetzen</button><a class="secondary-button" href="display.html" target="_blank">Turnierbildschirm öffnen</a></div>
+        <div id="beerPongPrestart" class="beer-pong-prestart"><p class="eyebrow">Fester Spielplan · 6 Becher · 6 Minuten</p><div><span><b>Runde 1 · Tisch 1</b> 🔴 Draco vs. 🟢 Serpens</span><span><b>Runde 1 · Tisch 2</b> 🔵 Lupus vs. ⚫ Corvus</span><span><b>Runde 2 · Tisch 1</b> 🟡 Noctua vs. 🔴 Draco</span><span><b>Runde 3 · Tisch 1</b> 🟢 Serpens vs. 🔵 Lupus</span><span><b>Runde 4 · Tisch 1</b> ⚫ Corvus vs. 🟡 Noctua</span></div></div>
+
+        <div id="beerPongControls" class="hidden">
+          <div class="beer-pong-phase-head"><div><p class="eyebrow">Turnierphase</p><h3 id="beerPongPhase">Gruppenphase</h3></div><p id="beerPongPhaseHelp" class="save-message"></p></div>
+          <div id="beerPongMatches" class="beer-pong-admin-matches"></div>
+
+          <div id="beerPongGroupSection" class="beer-pong-admin-section">
+            <div class="panel-title"><div><p class="eyebrow">Live aus veröffentlichten Resultaten</p><h3>Gruppenrangliste</h3></div></div>
+            <p class="save-message">Erfasst werden getroffene gegnerische Becher. Differenz = eigene Treffer minus erhaltene Treffer.</p>
+            <div id="beerPongGroupTable" class="beer-pong-group-table"></div>
+            <div id="beerPongTieBreak" class="beer-pong-tiebreak hidden"><p class="eyebrow">⚠️ Stechen erforderlich</p><p class="save-message">Tragt nach dem Stechen für jedes betroffene Reich eine eindeutige Reihenfolge ein.</p><div id="beerPongTieInputs"></div><button id="saveBeerPongTieBreak" class="secondary-button" type="button">Stechen speichern</button></div>
+          </div>
+
+          <div class="beer-pong-phase-actions hunt-admin-actions">
+            <button id="evaluateBeerPongGroups" class="primary-button hidden" type="button">Gruppenphase auswerten</button>
+            <button id="releaseBeerPongSemifinals" class="primary-button hidden" type="button">Halbfinals freigeben</button>
+            <button id="releaseBeerPongFinal" class="primary-button hidden" type="button">Finale freigeben</button>
+            <button id="finishBeerPong" class="primary-button hidden" type="button">Turnier abschliessen</button>
+            <button id="resetBeerPongFinal" class="secondary-button hidden" type="button">Finale zurücksetzen</button>
+            <button id="resetBeerPongKnockouts" class="secondary-button hidden" type="button">KO-Phase zurücksetzen</button>
+          </div>
+          <p id="beerPongMessage" class="form-error"></p>
+
+          <div id="beerPongRevealSection" class="beer-pong-reveal-admin hidden"><p class="eyebrow">Endgültige Siegerverkündung</p><h3>Die Tagesrangliste bleibt auf dem TV eingefroren</h3><p>Erst dieser Button enthüllt das Reich mit den meisten Tagespunkten. Der Beer-Pong-Sieger ist nicht automatisch der Gesamtsieger.</p><button id="revealRegnumWinner" class="primary-button" type="button">🏆 Regnum-Noctis-Sieger enthüllen</button></div>
+        </div>
+      </section>
+
       <section id="huntAdminPanel" class="panel hunt-control-panel">
         <div class="panel-title"><div><p class="eyebrow">Ganztägige Challenge</p><h2>🌙 Nachtjagd</h2></div><span id="huntAdminStatus" class="save-message">Noch nicht gestartet</span></div>
         <p class="save-message">Jeder Gegenstand bringt jedem Reich einmalig +1 Tagespunkt. Die Jagd läuft bis zum manuellen Stopp.</p>
@@ -147,6 +178,6 @@
     </div>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="admin.js?v=challenges-3"></script>
+  <script type="module" src="admin.js?v=beer-pong-1"></script>
 </body>
 </html>

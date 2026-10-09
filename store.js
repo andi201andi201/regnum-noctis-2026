@@ -1,7 +1,8 @@
 import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
-import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, rebuildNovitiusReveals, finalizeNovitiusGame, scoreNovitiusAnswer } from "./data.js?v=challenges-3";
-import { HUNT_DEFAULT_TARGETS, HUNT_POINTS_PER_OBJECT, normaliseHuntTargets, huntTargetList } from "./hunt-data.js?v=challenges-3";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, buildGameChallenges, normaliseGameChallengesAdmin, cleanEstimateQuestion, cleanChallengeResult, cleanEstimateValue, buildChallengePublicRound, buildPublicEstimate, calculateGameChallenges, challengeEstimateQuestions, challengeTimerRemaining, emptyChallengeTimer } from "./challenges-data.js?v=challenges-3";
+import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, rebuildNovitiusReveals, finalizeNovitiusGame, scoreNovitiusAnswer } from "./data.js?v=beer-pong-1";
+import { HUNT_DEFAULT_TARGETS, HUNT_POINTS_PER_OBJECT, normaliseHuntTargets, huntTargetList } from "./hunt-data.js?v=beer-pong-1";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, buildGameChallenges, normaliseGameChallengesAdmin, cleanEstimateQuestion, cleanChallengeResult, cleanEstimateValue, buildChallengePublicRound, buildPublicEstimate, calculateGameChallenges, challengeEstimateQuestions, challengeTimerRemaining, emptyChallengeTimer } from "./challenges-data.js?v=beer-pong-1";
+import { BEER_PONG, buildBeerPong, normaliseBeerPongAdmin, cleanBeerPongResult, publicBeerPongMatch, evaluateBeerPongGroups, releaseBeerPongSemifinals, releaseBeerPongFinal, completeBeerPong, resetBeerPongKnockouts, resetBeerPongFinal } from "./beer-pong-data.js?v=beer-pong-1";
 
 const STORAGE_KEY = "regnum-noctis-demo";
 let firebase = null;
@@ -44,6 +45,7 @@ function firebaseStore() {
     subscribeNovitiusParticipants(callback) { return firebase.onValue(firebase.ref(firebase.db, "novitiusParticipants"), snapshot => callback(snapshot.val() || {})); },
     subscribeNovitiusAnswers(callback) { return firebase.onValue(firebase.ref(firebase.db, "novitiusAnswers"), snapshot => callback(snapshot.val() || {})); },
     subscribeGameChallengesAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "gameChallengesAdmin"), snapshot => callback(normaliseGameChallengesAdmin(snapshot.val()))); },
+    subscribeBeerPongAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "beerPongAdmin"), snapshot => callback(normaliseBeerPongAdmin(snapshot.val()))); },
     subscribeHuntAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "huntAdmin"), snapshot => callback({ targets: normaliseHuntTargets(snapshot.val()?.targets) })); },
     async subscribeSongBattleTeam(teamId, callback) {
       if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
@@ -419,6 +421,57 @@ function firebaseStore() {
       const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`)), firebase.get(firebase.ref(firebase.db, "gameChallengesAdmin"))]);
       await firebase.update(firebase.ref(firebase.db), { [`games/${GAME_CHALLENGES.id}`]: buildGameChallenges("not-started", gameSnapshot.val()), gameChallengesAdmin: resetGameChallengesAdmin(adminSnapshot.val()), "settings/updatedAt": firebase.serverTimestamp() });
     },
+    async startBeerPong() {
+      await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: buildBeerPong("running"), beerPongAdmin: normaliseBeerPongAdmin(), "settings/mode": "live", "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async startBeerPongMatch(matchId) {
+      const gameRef = firebase.ref(firebase.db, `games/${BEER_PONG.id}`), game = (await firebase.get(gameRef)).val(), match = game?.matches?.[matchId];
+      validateBeerPongMatchStart(game, match);
+      const now = Date.now(), timed = match.stage !== "final";
+      await firebase.update(firebase.ref(firebase.db, `games/${BEER_PONG.id}/matches/${matchId}`), { status: "running", startedAt: now, endsAt: timed ? now + 6 * 60000 : 0 });
+    },
+    async saveBeerPongMatch(matchId, result) {
+      const game = (await firebase.get(firebase.ref(firebase.db, `games/${BEER_PONG.id}`))).val(), match = game?.matches?.[matchId];
+      if (!match) throw new Error("Match nicht gefunden.");
+      const clean = cleanBeerPongResult(match, result);
+      await firebase.update(firebase.ref(firebase.db), { [`beerPongAdmin/drafts/${matchId}`]: clean, "beerPongAdmin/updatedAt": firebase.serverTimestamp() });
+    },
+    async publishBeerPongMatch(matchId) {
+      const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${BEER_PONG.id}`)), firebase.get(firebase.ref(firebase.db, "beerPongAdmin"))]);
+      const admin = normaliseBeerPongAdmin(adminSnapshot.val()), game = publishBeerPongDraft(gameSnapshot.val(), admin, matchId);
+      await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: game, [`beerPongAdmin/drafts/${matchId}`]: null, "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async saveBeerPongTieBreakRanks(ranks) {
+      const clean = cleanBeerPongTieBreakRanks(ranks);
+      await firebase.update(firebase.ref(firebase.db), { "beerPongAdmin/tieBreakRanks": clean, "beerPongAdmin/updatedAt": firebase.serverTimestamp() });
+    },
+    async evaluateBeerPongGroups() {
+      const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${BEER_PONG.id}`)), firebase.get(firebase.ref(firebase.db, "beerPongAdmin"))]);
+      const game = evaluateBeerPongGroups(gameSnapshot.val(), normaliseBeerPongAdmin(adminSnapshot.val()).tieBreakRanks);
+      await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async releaseBeerPongSemifinals() { const gameRef = firebase.ref(firebase.db, `games/${BEER_PONG.id}`), game = releaseBeerPongSemifinals((await firebase.get(gameRef)).val()); await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() }); },
+    async releaseBeerPongFinal() { const gameRef = firebase.ref(firebase.db, `games/${BEER_PONG.id}`), game = releaseBeerPongFinal((await firebase.get(gameRef)).val()); await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() }); },
+    async finishBeerPong() { const gameRef = firebase.ref(firebase.db, `games/${BEER_PONG.id}`), game = completeBeerPong((await firebase.get(gameRef)).val()); await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() }); },
+    async resetBeerPongFinal() {
+      const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${BEER_PONG.id}`)), firebase.get(firebase.ref(firebase.db, "beerPongAdmin"))]);
+      const admin = normaliseBeerPongAdmin(adminSnapshot.val()); delete admin.drafts.final;
+      await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: resetBeerPongFinal(gameSnapshot.val()), beerPongAdmin: admin, "settings/mode": "live", "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async resetBeerPongKnockouts() {
+      const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${BEER_PONG.id}`)), firebase.get(firebase.ref(firebase.db, "beerPongAdmin"))]);
+      const admin = normaliseBeerPongAdmin(adminSnapshot.val()); Object.keys(admin.drafts).filter(id => id.startsWith("semi-") || id === "final").forEach(id => delete admin.drafts[id]);
+      await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: resetBeerPongKnockouts(gameSnapshot.val()), beerPongAdmin: admin, "settings/mode": "live", "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async revealRegnumWinner() {
+      const gameRef = firebase.ref(firebase.db, `games/${BEER_PONG.id}`), game = (await firebase.get(gameRef)).val();
+      if (game?.status !== "completed") throw new Error("Das Beer-Pong-Turnier ist noch nicht abgeschlossen.");
+      await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}/finalReveal`]: true, "settings/mode": "final", "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async resetBeerPong() {
+      const current = (await firebase.get(firebase.ref(firebase.db, `games/${BEER_PONG.id}`))).val();
+      await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: buildBeerPong("not-started", current), beerPongAdmin: null, "settings/mode": "live", "settings/updatedAt": firebase.serverTimestamp() });
+    },
     deleteGame: id => firebase.remove(firebase.ref(firebase.db, `games/${id}`)),
     setMode: mode => firebase.update(firebase.ref(firebase.db, "settings"), { mode, updatedAt: firebase.serverTimestamp() }),
     async saveHuntTarget(targetId, target) {
@@ -527,6 +580,7 @@ function localStore() {
     subscribeNovitiusParticipants(callback) { const listener = state => callback(state.novitiusParticipants || {}); listeners.add(listener); callback(read().novitiusParticipants || {}); return () => listeners.delete(listener); },
     subscribeNovitiusAnswers(callback) { const listener = state => callback(state.novitiusAnswers || {}); listeners.add(listener); callback(read().novitiusAnswers || {}); return () => listeners.delete(listener); },
     subscribeGameChallengesAdmin(callback) { const listener = state => callback(normaliseGameChallengesAdmin(state.gameChallengesAdmin)); listeners.add(listener); callback(normaliseGameChallengesAdmin(read().gameChallengesAdmin)); return () => listeners.delete(listener); },
+    subscribeBeerPongAdmin(callback) { const listener = state => callback(normaliseBeerPongAdmin(state.beerPongAdmin)); listeners.add(listener); callback(normaliseBeerPongAdmin(read().beerPongAdmin)); return () => listeners.delete(listener); },
     subscribeHuntAdmin(callback) { const listener = state => callback({ targets: normaliseHuntTargets(state.huntAdmin?.targets) }); listeners.add(listener); listener(read()); return () => listeners.delete(listener); },
     async subscribeSongBattleTeam(teamId, callback) { const listener = state => { const participant = state.songBattleParticipants?.[teamId] || null; callback({ answers: state.songBattleAnswers?.[teamId] || {}, participant, owned: participant?.claimantId === getLocalProfileId() }); }; listeners.add(listener); listener(read()); return () => listeners.delete(listener); },
     async subscribeNovitiusPlayer(callback) { const participantId = getLocalProfileId(); const listener = state => callback({ participantId, participant: state.novitiusParticipants?.[participantId] || null, answers: state.novitiusAnswers?.[participantId] || {} }); listeners.add(listener); listener(read()); return () => listeners.delete(listener); },
@@ -570,6 +624,19 @@ function localStore() {
     async revealGameChallengeEstimate() { const state = read(), game = state.games[GAME_CHALLENGES.id]; for (let round = 1; round <= GAME_CHALLENGES.roundCount; round += 1) if (!game?.roundPublished?.[`round-${round}`]) throw new Error("Die Schätz-Challenge darf erst nach allen fünf Runden aufgelöst werden."); game.estimateRevealed = true; game.publicEstimate = buildPublicEstimate(state.gameChallengesAdmin); game.updatedAt = Date.now(); write(state); },
     async finishGameChallenges() { const state = read(); state.games[GAME_CHALLENGES.id] = calculateGameChallenges(state.games[GAME_CHALLENGES.id], state.gameChallengesAdmin); state.settings.updatedAt = Date.now(); write(state); },
     async resetGameChallenges() { const state = read(); state.games[GAME_CHALLENGES.id] = buildGameChallenges("not-started", state.games[GAME_CHALLENGES.id]); state.gameChallengesAdmin = resetGameChallengesAdmin(state.gameChallengesAdmin); state.settings.updatedAt = Date.now(); write(state); },
+    async startBeerPong() { const state = read(); state.games[BEER_PONG.id] = buildBeerPong("running"); state.beerPongAdmin = normaliseBeerPongAdmin(); state.settings.mode = "live"; state.settings.updatedAt = Date.now(); write(state); },
+    async startBeerPongMatch(matchId) { const state = read(), game = state.games[BEER_PONG.id], match = game?.matches?.[matchId]; validateBeerPongMatchStart(game, match); const now = Date.now(); match.status = "running"; match.startedAt = now; match.endsAt = match.stage === "final" ? 0 : now + 6 * 60000; write(state); },
+    async saveBeerPongMatch(matchId, result) { const state = read(), match = state.games[BEER_PONG.id]?.matches?.[matchId]; if (!match) throw new Error("Match nicht gefunden."); state.beerPongAdmin = normaliseBeerPongAdmin(state.beerPongAdmin); state.beerPongAdmin.drafts[matchId] = cleanBeerPongResult(match, result); state.beerPongAdmin.updatedAt = Date.now(); write(state); },
+    async publishBeerPongMatch(matchId) { const state = read(); state.beerPongAdmin = normaliseBeerPongAdmin(state.beerPongAdmin); state.games[BEER_PONG.id] = publishBeerPongDraft(state.games[BEER_PONG.id], state.beerPongAdmin, matchId); delete state.beerPongAdmin.drafts[matchId]; state.settings.updatedAt = Date.now(); write(state); },
+    async saveBeerPongTieBreakRanks(ranks) { const state = read(); state.beerPongAdmin = normaliseBeerPongAdmin(state.beerPongAdmin); state.beerPongAdmin.tieBreakRanks = cleanBeerPongTieBreakRanks(ranks); state.beerPongAdmin.updatedAt = Date.now(); write(state); },
+    async evaluateBeerPongGroups() { const state = read(); state.games[BEER_PONG.id] = evaluateBeerPongGroups(state.games[BEER_PONG.id], normaliseBeerPongAdmin(state.beerPongAdmin).tieBreakRanks); state.settings.updatedAt = Date.now(); write(state); },
+    async releaseBeerPongSemifinals() { const state = read(); state.games[BEER_PONG.id] = releaseBeerPongSemifinals(state.games[BEER_PONG.id]); state.settings.updatedAt = Date.now(); write(state); },
+    async releaseBeerPongFinal() { const state = read(); state.games[BEER_PONG.id] = releaseBeerPongFinal(state.games[BEER_PONG.id]); state.settings.updatedAt = Date.now(); write(state); },
+    async finishBeerPong() { const state = read(); state.games[BEER_PONG.id] = completeBeerPong(state.games[BEER_PONG.id]); state.settings.updatedAt = Date.now(); write(state); },
+    async resetBeerPongFinal() { const state = read(); state.games[BEER_PONG.id] = resetBeerPongFinal(state.games[BEER_PONG.id]); state.beerPongAdmin = normaliseBeerPongAdmin(state.beerPongAdmin); delete state.beerPongAdmin.drafts.final; state.settings.mode = "live"; state.settings.updatedAt = Date.now(); write(state); },
+    async resetBeerPongKnockouts() { const state = read(); state.games[BEER_PONG.id] = resetBeerPongKnockouts(state.games[BEER_PONG.id]); state.beerPongAdmin = normaliseBeerPongAdmin(state.beerPongAdmin); Object.keys(state.beerPongAdmin.drafts).filter(id => id.startsWith("semi-") || id === "final").forEach(id => delete state.beerPongAdmin.drafts[id]); state.settings.mode = "live"; state.settings.updatedAt = Date.now(); write(state); },
+    async revealRegnumWinner() { const state = read(), game = state.games[BEER_PONG.id]; if (game?.status !== "completed") throw new Error("Das Beer-Pong-Turnier ist noch nicht abgeschlossen."); game.finalReveal = true; state.settings.mode = "final"; state.settings.updatedAt = Date.now(); write(state); },
+    async resetBeerPong() { const state = read(); state.games[BEER_PONG.id] = buildBeerPong("not-started", state.games[BEER_PONG.id]); state.beerPongAdmin = normaliseBeerPongAdmin(); state.settings.mode = "live"; state.settings.updatedAt = Date.now(); write(state); },
     async deleteGame(id) { const state = read(); delete state.games[id]; state.settings.updatedAt = Date.now(); write(state); },
     async setMode(mode) { const state = read(); state.settings = { ...state.settings, mode, updatedAt: Date.now() }; write(state); },
     async saveHuntTarget(targetId, target) { const state = read(); state.huntAdmin ||= { targets: {} }; state.huntAdmin.targets = normaliseHuntTargets(state.huntAdmin.targets); state.huntAdmin.targets[targetId] = cleanHuntTarget(targetId, target); write(state); },
@@ -634,6 +701,7 @@ function normalise(value) {
     novitiusSubmissions: value?.novitiusSubmissions || {},
     novitiusAdmin: normaliseNovitiusAdmin(value?.novitiusAdmin),
     gameChallengesAdmin: normaliseGameChallengesAdmin(value?.gameChallengesAdmin),
+    beerPongAdmin: normaliseBeerPongAdmin(value?.beerPongAdmin),
     huntAdmin: { targets: normaliseHuntTargets(value?.huntAdmin?.targets) },
     oracleAnswers: value?.oracleAnswers || {},
     oracleQuestions: value?.oracleQuestions || {}
@@ -662,6 +730,47 @@ function applyChallengeRoundEntries(value, roundNumber, entries = {}) {
   });
   admin.updatedAt = Date.now();
   return admin;
+}
+
+function validateBeerPongMatchStart(game, match) {
+  if (game?.status !== "running") throw new Error("Das Beer-Pong-Turnier läuft nicht.");
+  if (!match) throw new Error("Match nicht gefunden.");
+  if (match.published || match.status === "completed") throw new Error("Dieses Match ist bereits abgeschlossen. Korrekturen direkt beim Resultat erfassen.");
+  const expectedPhase = match.stage === "group" ? "groups" : match.stage === "semifinal" ? "semifinals" : "final";
+  if (game.phase !== expectedPhase) throw new Error("Dieses Match ist in der aktuellen Turnierphase noch nicht freigegeben.");
+}
+
+function publishBeerPongDraft(gameValue, adminValue, matchId) {
+  let game = { ...(gameValue || {}), matches: { ...(gameValue?.matches || {}) } };
+  const admin = normaliseBeerPongAdmin(adminValue), original = game.matches?.[matchId], draft = admin.drafts?.[matchId];
+  if (!original) throw new Error("Match nicht gefunden.");
+  if (!draft) throw new Error("Bitte das Resultat zuerst speichern und kontrollieren.");
+  const correction = !!original.published;
+  if (correction && original.stage === "group") {
+    if (game.semifinalsReleased) {
+      const knockouts = Object.values(game.matches).filter(match => match.stage === "semifinal" || match.stage === "final");
+      if (knockouts.some(match => match.status !== "pending" || match.published)) throw new Error("Die KO-Phase enthält bereits Resultate. Bitte zuerst die KO-Phase zurücksetzen.");
+      game = resetBeerPongKnockouts(game);
+    } else if (game.groupEvaluated) {
+      game.groupEvaluated = false; game.groupRanking = []; game.groupStandings = [];
+    }
+  }
+  if (correction && original.stage === "semifinal" && game.finalReleased) {
+    const final = game.matches.final;
+    if (final?.status !== "pending" || final?.published) throw new Error("Das Finale wurde bereits gestartet. Bitte zuerst das Finale zurücksetzen.");
+    game = resetBeerPongFinal(game);
+  }
+  const match = game.matches?.[matchId] || original;
+  game.matches[matchId] = publicBeerPongMatch(match, draft);
+  if (match.stage === "final" && game.status === "completed") game = completeBeerPong(game);
+  game.updatedAt = Date.now();
+  return game;
+}
+
+function cleanBeerPongTieBreakRanks(value = {}) {
+  const clean = {};
+  TEAMS.forEach(team => { const rank = Number(value[team.id]); if (Number.isInteger(rank) && rank > 0) clean[team.id] = rank; });
+  return clean;
 }
 
 function cleanHuntTarget(targetId, target) {

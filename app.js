@@ -1,7 +1,8 @@
-import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=challenges-3";
-import { getStore } from "./store.js?v=challenges-3";
+import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=beer-pong-1";
+import { getStore } from "./store.js?v=beer-pong-1";
 import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js";
-import { GAME_CHALLENGES } from "./challenges-data.js?v=challenges-3";
+import { GAME_CHALLENGES } from "./challenges-data.js?v=beer-pong-1";
+import { BEER_PONG } from "./beer-pong-data.js?v=beer-pong-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -18,6 +19,7 @@ window.addEventListener("regnum-player-changed", () => {
     maybeCelebrateGameWinner(currentState.games?.[SONG_BATTLE.id], SONG_BATTLE.id);
     maybeCelebrateGameWinner(currentState.games?.[NOVITIUS_GAME.id], NOVITIUS_GAME.id);
     maybeCelebrateGameWinner(currentState.games?.[GAME_CHALLENGES.id], GAME_CHALLENGES.id);
+    maybeCelebrateGameWinner(currentState.games?.[BEER_PONG.id], BEER_PONG.id);
   }
 });
 $("#victoryCelebration").addEventListener("click", hideVictoryCelebration);
@@ -125,6 +127,9 @@ function render(state) {
   if (novitiusGame?.status === "completed") maybeCelebrateGameWinner(novitiusGame, NOVITIUS_GAME.id);
   const challengesGame = state.games[GAME_CHALLENGES.id];
   if (challengesGame?.status === "completed") maybeCelebrateGameWinner(challengesGame, GAME_CHALLENGES.id);
+  const beerPongGame = state.games[BEER_PONG.id];
+  $("#beerPongCard").classList.toggle("hidden", beerPongGame?.status !== "running");
+  if (beerPongGame?.status === "completed") maybeCelebrateGameWinner(beerPongGame, BEER_PONG.id);
 
   $("#leaderboard").innerHTML = ranking.map((team, index) => `
     <li class="rank-card ${index === 0 && hasResults ? "leader" : ""}" style="--team:${team.color};--glow:${team.glow}">
@@ -215,6 +220,12 @@ function renderSongReveal(reveal) {
 }
 
 function renderGameResult(game) {
+  if (game.id === BEER_PONG.id && game.status === "completed") {
+    return `<article class="result-row song-public-result beer-pong-public-result"><div class="result-title"><span>${formatTime(game.createdAt, true)}</span><strong>🍺 BEER PONG – TURNIERRESULTAT</strong><ol>${(game.ranking || []).map((teamId, index) => {
+      const team = TEAMS.find(item => item.id === teamId), place = Number(game.placements?.[teamId] || index + 1);
+      return `<li style="--team:${team?.color || "#888"}"><b>${place}. ${place === 1 ? "🏆 " : ""}${team?.marker || ""} ${escapeHtml(team?.name || teamId)}</b><span>+${Number(game.points?.[teamId] || 0)} Tagespunkte</span></li>`;
+    }).join("")}</ol></div></article>`;
+  }
   if (game.id === SONG_BATTLE.id && game.status === "completed") {
     return `<article class="result-row song-public-result"><div class="result-title"><span>${formatTime(game.createdAt, true)}</span><strong>🎵 SONG BATTLE – RESULTAT</strong><ol>${(game.ranking || []).map((teamId, index) => {
       const team = TEAMS.find(item => item.id === teamId);

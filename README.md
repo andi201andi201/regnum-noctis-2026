@@ -53,6 +53,8 @@ Der Workflow in `.github/workflows/pages.yml` veröffentlicht `main` automatisch
 - `novitiusAdmin/questions`: geschützter Fragenkatalog mit Lösungen und drei Toleranzbereichen
 - `games/game-challenges`: öffentlicher Status, Timer, Rotation, freigegebene Runden und Endwertung der fünf Stationen
 - `gameChallengesAdmin`: geschützte Rohresultate, Schätzfragen, Lösungen und Schätzungen aller Reiche
+- `games/beer-pong`: öffentlicher Turnierstatus, veröffentlichte Matches, Gruppenrangliste, KO-Phase, Endrang und Enthüllungsstatus
+- `beerPongAdmin`: geschützte Matchentwürfe und manuelle Stechen-Reihenfolge; nie öffentlich lesbar
 - `settings/hunt`: öffentlicher Nachtjagd-Status und die für die laufende Runde eingefrorenen Hinweise
 - `huntAdmin/targets`: geschützte Bearbeitung der internen Namen, KI-Erkennungsziele und Hinweise
 - `games/hunt-{runde}-{reich}-{gegenstand}`: atomarer, eindeutig adressierter Fund mit genau einem Tagespunkt
@@ -135,6 +137,31 @@ entscheidet nach der Summe zuerst die Zahl gewonnener Stationen; bleibt der
 Gleichstand bestehen, teilen sich die Reiche Rang und Tagespunkte. Der Abschluss
 überschreibt immer denselben Spieleintrag. Spätere Korrekturen berechnen damit
 Stationsrang, Gesamtwertung und Tagespunkte neu, ohne Punkte doppelt zu zählen.
+
+## Beer Pong – Battle of the Five Realms
+
+Das Abendturnier läuft unter `games/beer-pong`. Die Gruppenphase besteht aus den
+fünf fest geplanten Paarungen. Pro Match werden die getroffenen gegnerischen
+Becher erfasst; ein Sieg gibt zwei Gruppenpunkte. Die Tabelle sortiert nach
+Gruppenpunkten, Becherdifferenz und insgesamt getroffenen Bechern. Bleiben Reiche
+exakt gleich, erfasst die Spielleitung nach einem Entscheidungswurf ihre
+eindeutige Reihenfolge im Adminbereich.
+
+Jedes Match wird zuerst nur als geschützter Entwurf unter `beerPongAdmin`
+gespeichert. Erst **Resultat veröffentlichen** überträgt den kontrollierten Stand
+in das öffentliche Turnier. Dadurch sieht der Grossbildschirm weder unfertige
+Eingaben noch spätere Korrekturen vor deren erneuter Freigabe. Die ersten vier
+Reiche erreichen die Halbfinals (1 gegen 4 und 2 gegen 3), das Finale wird mit
+zehn Bechern und ohne Zeitlimit gespielt. Platz drei und vier richten sich nach
+der ursprünglichen Gruppenplatzierung der beiden Halbfinalverlierer.
+
+Der Abschluss ersetzt immer denselben Spielstand und vergibt genau einmal
+5 / 4 / 3 / 2 / 1 Tagespunkte. Für Korrekturen können Finale oder gesamte
+KO-Phase kontrolliert zurückgesetzt und neu freigegeben werden. Auf den Handys
+erscheint währenddessen nur ein kompakter Verweis auf den Grossbildschirm. Die
+TV-Ansicht wechselt in eine eigene Turnierarena und hält nach dem Finale die
+normale Tagesrangliste weiter verborgen. Erst **Regnum-Noctis-Sieger enthüllen**
+zeigt den Gesamtsieger aus allen Tagespunkten bildschirmfüllend.
 
 ## Nachtjagd
 
