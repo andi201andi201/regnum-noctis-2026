@@ -152,3 +152,15 @@ body.onboarding-open{overflow:hidden}.onboarding{position:fixed;inset:0;z-index:
 .participant-team-counts { display:flex; flex-wrap:wrap; gap: .6rem 1.2rem; margin: 1rem 0; font-size: .85rem; }
 .participant-row > div:first-child { min-width:0; overflow-wrap:anywhere; }
 @media (max-width: 640px) { .participant-row { align-items:flex-start; flex-direction:column; gap:.75rem; } .participant-row .admin-actions { width:100%; } }
+
+/* Ranglisten bleiben ruhig; Bewegung zeigt nur echte Platz- und Punkteänderungen. */
+.rank-card.own-realm { border-color:color-mix(in srgb,var(--team) 65%,#ffffff25); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--team) 24%,transparent),0 0 18px color-mix(in srgb,var(--team) 12%,transparent); }
+.own-realm-label { display:inline-flex; justify-self:start; margin-top:4px; padding:3px 7px; border:1px solid color-mix(in srgb,var(--team) 45%,#ffffff25); border-radius:99px; background:color-mix(in srgb,var(--team) 14%,#11131a); color:#e9e4db; font:600 .58rem Inter,sans-serif; letter-spacing:.025em; }
+.own-realm-label[hidden] { display:none; }
+[data-score-container] { position:relative; }
+.rank-card .score { grid-column:5; padding-left:30px; }
+.ranking-delta { position:absolute; top:2px; left:0; pointer-events:none; white-space:nowrap; padding:3px 6px; border:1px solid #82d69a40; border-radius:6px; background:#10271e; color:#a2edba; font:700 .65rem Inter,sans-serif; line-height:1; }
+.ranking-delta.is-negative { border-color:#e4b08b50; background:#2b1b12; color:#f0c19d; }
+.display-ranking em { grid-column:5; padding-left:2.7vw; }
+.display-page .ranking-delta { top:.6vh; padding:.35vh .4vw; border-radius:.3vw; font-size:1vw; }
+@media (max-width:560px) { .rank-card .score { grid-column:4; } }

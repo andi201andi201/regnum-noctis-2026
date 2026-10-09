@@ -4,6 +4,7 @@ import { TEAM_STORIES, getPlayerProfile, savePlayerProfile, clearPlayerProfile }
 import { GAME_CHALLENGES } from "./challenges-data.js?v=participants-20261010-1";
 import { BEER_PONG } from "./beer-pong-data.js?v=participants-20261010-1";
 import { BALLOON_MONSTER } from "./balloon-monster-data.js?v=participants-20261010-1";
+import { renderRanking } from "./ranking-motion.js?v=ranking-polish-20261010-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -15,6 +16,7 @@ $("#connectionText").textContent = window.regnumConnectionState === true ? "Live
 document.body.classList.add("ready");
 setupOnboarding();
 window.addEventListener("regnum-player-changed", () => {
+  highlightOwnRealm();
   ensureSongTeamSubscription();
   if (currentState?.settings?.mode === "live") {
     maybeCelebrateGameWinner(currentState.games?.[SONG_BATTLE.id], SONG_BATTLE.id);
@@ -178,14 +180,18 @@ function render(state) {
   $("#beerPongPublicTitle").textContent = beerPongAwaitingReveal ? "Beer Pong ist entschieden" : "Beer Pong läuft";
   $("#beerPongPublicText").textContent = beerPongAwaitingReveal ? "Das Resultat und die Siegerverkündung siehst du jetzt auf dem grossen Bildschirm." : "Verfolge das Turnier auf dem grossen Bildschirm.";
 
-  $("#leaderboard").innerHTML = ranking.map((team, index) => `
-    <li class="rank-card ${index === 0 && hasResults ? "leader" : ""}" style="--team:${team.color};--glow:${team.glow}">
+  const hasLeader = totals[leader.id] > 0;
+  renderRanking($("#leaderboard"), ranking.map((team, index) => ({
+    id: team.id, points: totals[team.id], color: team.color, glow: team.glow,
+    className: `rank-card ${index === 0 && hasLeader ? "leader" : ""}`,
+    html: `
       <div class="position">${index + 1}</div>
       <div class="crest"><img src="${team.logo}" alt="Wappen ${team.name}"></div>
-      <div class="team-copy"><strong>${team.name}</strong><small>${team.title}</small></div>
-      ${index === 0 && hasResults ? '<div class="crown" title="Führendes Reich">♛</div>' : ""}
-      <div class="score"><strong>${totals[team.id]}</strong><small>Punkte</small></div>
-    </li>`).join("");
+      <div class="team-copy"><strong>${team.name}</strong><small>${team.title}</small><span class="own-realm-label" hidden>Dein Reich</span></div>
+      ${index === 0 && hasLeader ? '<div class="crown" title="Führendes Reich">♛</div>' : ""}
+      <div class="score" data-score-container><strong data-score>${totals[team.id]}</strong><small>Punkte</small></div>`
+  })));
+  highlightOwnRealm();
   $("#updatedAt").textContent = state.settings.updatedAt ? `Stand ${formatTime(state.settings.updatedAt)}` : "Noch keine Resultate";
 
   if (hasResults) {
@@ -202,6 +208,16 @@ function render(state) {
 
   if (hasResults && previousLeader && previousLeader !== leader.id) burstConfetti(leader.color);
   if (hasResults) { previousLeader = leader.id; sessionStorage.setItem("regnum-leader", leader.id); }
+}
+
+function highlightOwnRealm() {
+  const ownTeamId = getPlayerProfile()?.teamId;
+  $("#leaderboard").querySelectorAll("[data-team-id]").forEach(row => {
+    const own = row.dataset.teamId === ownTeamId;
+    row.classList.toggle("own-realm", own);
+    const label = row.querySelector(".own-realm-label");
+    if (label) label.hidden = !own;
+  });
 }
 
 function renderSongBattle(game) {

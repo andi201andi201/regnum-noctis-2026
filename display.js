@@ -5,6 +5,7 @@ import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, stationById, challengeTimerR
 import { BEER_PONG, beerPongMatchList, calculateBeerPongGroupTable } from "./beer-pong-data.js?v=participants-20261010-1";
 import { BALLOON_MONSTER, balloonTimerRemaining, balloonRanking } from "./balloon-monster-data.js?v=participants-20261010-1";
 import { serverNow } from "./time.js?v=participants-20261010-1";
+import { renderRanking } from "./ranking-motion.js?v=ranking-polish-20261010-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -16,7 +17,12 @@ function render(state) {
   currentState = state;
   const totals = totalsFromGames(state.games);
   const ranking = [...TEAMS].sort((a, b) => totals[b.id] - totals[a.id] || a.name.localeCompare(b.name));
-  $("#displayLeaderboard").innerHTML = ranking.map((team, index) => `<li class="${index === 0 ? "leader" : ""}" style="--team:${team.color};--glow:${team.glow}"><span class="display-rank">${index + 1}</span><img src="${team.logo}" alt=""><div><strong>${team.name}</strong><small>${team.title}</small></div>${index === 0 ? "<b class=display-crown>♛</b>" : ""}<em>${totals[team.id]}<small>Punkte</small></em></li>`).join("");
+  const hasLeader = totals[ranking[0].id] > 0;
+  renderRanking($("#displayLeaderboard"), ranking.map((team, index) => ({
+    id: team.id, points: totals[team.id], color: team.color, glow: team.glow,
+    className: index === 0 && hasLeader ? "leader" : "",
+    html: `<span class="display-rank">${index + 1}</span><img src="${team.logo}" alt=""><div><strong>${team.name}</strong><small>${team.title}</small></div>${index === 0 && hasLeader ? "<b class=display-crown>♛</b>" : ""}<em data-score-container><span data-score>${totals[team.id]}</span><small>Punkte</small></em>`
+  })));
   const hunt = state.settings.hunt || {}, total = Number(hunt.targetCount || 10);
   $("#displayHuntStatus").textContent = hunt.active ? "Die Jagd läuft" : hunt.roundId ? "Jagd beendet" : "Noch nicht gestartet";
   $("#displayHuntProgress").innerHTML = TEAMS.map(team => { const count = hunt.roundId ? huntProgress(state.games, hunt.roundId, team.id).size : 0; return `<div style="--team:${team.color}"><header><span>${team.marker} ${team.name}</span><strong>${count} / ${total}</strong></header><i><b style="width:${total ? count / total * 100 : 0}%"></b></i></div>`; }).join("");
