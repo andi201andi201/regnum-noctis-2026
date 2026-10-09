@@ -1,6 +1,6 @@
-import { getStore } from "./store.js?v=ballon-monster-1";
-import { getPlayerProfile } from "./player.js";
-import { huntProgress } from "./hunt-data.js?v=ballon-monster-1";
+import { getStore } from "./store.js?v=firebase-live-20261009-1";
+import { getPlayerProfile } from "./player.js?v=firebase-live-20261009-1";
+import { huntProgress } from "./hunt-data.js?v=firebase-live-20261009-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();

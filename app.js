@@ -1,9 +1,9 @@
-import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=ballon-monster-1";
-import { getStore } from "./store.js?v=ballon-monster-1";
-import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js";
-import { GAME_CHALLENGES } from "./challenges-data.js?v=ballon-monster-1";
-import { BEER_PONG } from "./beer-pong-data.js?v=ballon-monster-1";
-import { BALLOON_MONSTER } from "./balloon-monster-data.js?v=ballon-monster-1";
+import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=firebase-live-20261009-1";
+import { getStore } from "./store.js?v=firebase-live-20261009-1";
+import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js?v=firebase-live-20261009-1";
+import { GAME_CHALLENGES } from "./challenges-data.js?v=firebase-live-20261009-1";
+import { BEER_PONG } from "./beer-pong-data.js?v=firebase-live-20261009-1";
+import { BALLOON_MONSTER } from "./balloon-monster-data.js?v=firebase-live-20261009-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -11,7 +11,7 @@ let previousLeader = sessionStorage.getItem("regnum-leader"), currentState = nul
 let songTeamId = null, songTeamUnsubscribe = null, songSubscriptionToken = 0, songOwnAnswers = {}, songParticipant = null, songParticipantOwned = false, songDraftKey = null, songDraftDirty = false;
 
 store.subscribe(render);
-$("#connectionText").textContent = store.demo ? "Lokaler Demomodus" : "Live verbunden";
+$("#connectionText").textContent = window.regnumConnectionState === true ? "Live verbunden" : "Verbindung wird hergestellt";
 document.body.classList.add("ready");
 setupOnboarding();
 window.addEventListener("regnum-player-changed", () => {
@@ -197,6 +197,7 @@ function renderSongBattle(game) {
 }
 
 async function ensureSongTeamSubscription() {
+  if (currentState?.games?.[SONG_BATTLE.id]?.status !== "running") return;
   const teamId = getPlayerProfile()?.teamId || null;
   if (!teamId || teamId === songTeamId) return;
   songTeamUnsubscribe?.();
@@ -207,14 +208,18 @@ async function ensureSongTeamSubscription() {
   songParticipantOwned = false;
   songDraftKey = null;
   const token = ++songSubscriptionToken;
-  const stop = await store.subscribeSongBattleTeam(teamId, value => {
+  let stop;
+  try { stop = await store.subscribeSongBattleTeam(teamId, value => {
     if (token !== songSubscriptionToken) return;
     songOwnAnswers = value?.answers || {};
     songParticipant = value?.participant || null;
     songParticipantOwned = !!value?.owned;
     songDraftDirty = false;
     if (currentState?.settings?.mode === "live") renderSongBattle(currentState.games?.[SONG_BATTLE.id]);
-  });
+  }); } catch (error) {
+    if (token === songSubscriptionToken) { songTeamId = null; $("#songBattleMessage").textContent = `Verbindung zur Teilnahme fehlgeschlagen: ${error.message}`; }
+    return;
+  }
   if (token !== songSubscriptionToken) stop?.();
   else songTeamUnsubscribe = stop;
 }
@@ -248,11 +253,16 @@ function renderGameResult(game) {
     }).join("")}</ol></div></article>`;
   }
   if (game.id === NOVITIUS_GAME.id && game.status === "completed") {
+    const top10 = (game.publicReveals?.["question-10"]?.top10 || []).slice(0, 10);
+    const individualRanking = top10.length ? `<small>Top 10 · Einzelwertung</small><ol>${top10.map((entry, index) => {
+      const team = TEAMS.find(item => item.id === entry.teamId);
+      return `<li style="--team:${team?.color || "#888"}"><b>${index + 1}. ${escapeHtml(entry.playerName)} · ${team?.marker || ""} ${escapeHtml(team?.name || "")}</b><span>${Number(entry.points || 0)}/30</span></li>`;
+    }).join("")}</ol>` : "";
     return `<article class="result-row song-public-result novitius-public-result"><div class="result-title"><span>${formatTime(game.createdAt, true)}</span><strong>WER KENNT DEN NOVITIUS? – RESULTAT</strong><small>Teamwertung: Durchschnitt aller angemeldeten Personen</small><ol>${(game.ranking || []).map((teamId, index) => {
       const team = TEAMS.find(item => item.id === teamId);
       const place = Number(game.placements?.[teamId] || index + 1);
       return `<li style="--team:${team?.color || "#888"}"><b>${place}. ${place === 1 ? "🏆 " : ""}${team?.marker || ""} ${escapeHtml(team?.name || teamId)}</b><span>Ø ${formatAverage(game.internalPoints?.[teamId])}/30 · +${Number(game.points?.[teamId] || 0)}</span></li>`;
-    }).join("")}</ol></div></article>`;
+    }).join("")}</ol>${individualRanking}</div></article>`;
   }
   if (game.id === GAME_CHALLENGES.id && game.status === "completed") {
     return `<article class="result-row song-public-result challenge-public-result"><div class="result-title"><span>${formatTime(game.createdAt, true)}</span><strong>🏆 GAME CHALLENGES – RESULTAT</strong><small>5 Stationen · Gleichstände teilen sich den Platz</small><ol>${(game.ranking || []).map((teamId, index) => {

@@ -1,6 +1,6 @@
-import { TEAMS, NOVITIUS_GAME, scoreNovitiusAnswer } from "./data.js?v=ballon-monster-1";
-import { getStore } from "./store.js?v=ballon-monster-1";
-import { getPlayerProfile } from "./player.js";
+import { TEAMS, NOVITIUS_GAME, scoreNovitiusAnswer } from "./data.js?v=firebase-live-20261009-1";
+import { getStore } from "./store.js?v=firebase-live-20261009-1";
+import { getPlayerProfile } from "./player.js?v=firebase-live-20261009-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -8,10 +8,13 @@ let currentState = null;
 let playerState = { participantId: null, participant: null, answers: {} };
 let playerUnsubscribe = null;
 let subscriptionToken = 0;
+let playerSubscriptionPending = false;
+let playerSubscriptionProfile = null;
 
-store.subscribe(state => { currentState = state; render(); });
-subscribePlayer();
-window.addEventListener("regnum-player-changed", subscribePlayer);
+$("#novitiusGameRanking").insertAdjacentHTML("afterend", '<h4>Top 10 · Einzelwertung</h4><ol id="novitiusTopTen" class="novitius-top-ten"></ol>');
+
+store.subscribe(state => { currentState = state; subscribePlayer(); render(); });
+window.addEventListener("regnum-player-changed", () => subscribePlayer(true));
 
 $("#joinNovitius").addEventListener("click", async () => {
   const profile = getPlayerProfile();
@@ -45,11 +48,29 @@ $("#novitiusAnswerForm").addEventListener("submit", async event => {
   } finally { button.disabled = false; }
 });
 
-async function subscribePlayer() {
+async function subscribePlayer(force = false) {
+  const profile = getPlayerProfile();
+  if (currentState?.games?.[NOVITIUS_GAME.id]?.status !== "running" || !profile) {
+    if (playerUnsubscribe || playerSubscriptionPending || playerSubscriptionProfile) {
+      ++subscriptionToken;
+      playerUnsubscribe?.(); playerUnsubscribe = null;
+      playerSubscriptionPending = false; playerSubscriptionProfile = null;
+      playerState = { participantId: null, participant: null, answers: {} };
+    }
+    return;
+  }
+  const profileKey = `${profile.id || ""}:${profile.teamId}`;
+  if (!force && playerSubscriptionProfile === profileKey && (playerSubscriptionPending || playerUnsubscribe)) return;
   playerUnsubscribe?.();
+  playerUnsubscribe = null;
+  playerSubscriptionPending = true;
+  playerSubscriptionProfile = profileKey;
   playerState = { participantId: null, participant: null, answers: {} };
   const token = ++subscriptionToken;
-  const stop = await store.subscribeNovitiusPlayer(value => { if (token === subscriptionToken) { playerState = value || playerState; render(); } });
+  let stop;
+  try { stop = await store.subscribeNovitiusPlayer(value => { if (token === subscriptionToken) { playerState = value || playerState; render(); } }); }
+  catch (error) { if (token === subscriptionToken) $("#novitiusMessage").textContent = `Verbindung zur Teilnahme fehlgeschlagen: ${error.message}`; return; }
+  finally { if (token === subscriptionToken) playerSubscriptionPending = false; }
   if (token !== subscriptionToken) stop?.(); else playerUnsubscribe = stop;
 }
 
@@ -100,6 +121,10 @@ function renderReveal(reveal, ownAnswer) {
   $("#novitiusGameRanking").innerHTML = (reveal.ranking || []).map((teamId, index) => {
     const item = TEAMS.find(entry => entry.id === teamId), total = Number(reveal.teamTotals?.[teamId] || 0);
     return `<li style="--team:${item?.color || "#888"}"><span>${index + 1}.</span><div><strong>${item?.marker || ""} ${escapeHtml(item?.name || teamId)}</strong></div><em>${total.toFixed(2)}</em></li>`;
+  }).join("");
+  $("#novitiusTopTen").innerHTML = (reveal.top10 || []).map((participant, index) => {
+    const item = TEAMS.find(entry => entry.id === participant.teamId);
+    return `<li style="--team:${item?.color || "#888"}"><span>${index + 1}.</span><div><strong>${escapeHtml(participant.playerName)}</strong><small>${item?.marker || ""} ${escapeHtml(item?.name || participant.teamId)}</small></div><em>${Number(participant.points || 0)}</em></li>`;
   }).join("");
 }
 

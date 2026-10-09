@@ -1,9 +1,10 @@
-import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=ballon-monster-1";
-import { getStore } from "./store.js?v=ballon-monster-1";
-import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=ballon-monster-1";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, CHALLENGE_STATIONS, normaliseGameChallengesAdmin, challengeEstimateQuestions, stationById, challengeTimerRemaining, calculateGameChallenges } from "./challenges-data.js?v=ballon-monster-1";
-import { BEER_PONG, normaliseBeerPongAdmin, beerPongMatchList, calculateBeerPongGroupTable, beerPongTieGroups } from "./beer-pong-data.js?v=ballon-monster-1";
-import { BALLOON_MONSTER, normaliseBalloonMonsterAdmin, balloonTimerRemaining, balloonRanking } from "./balloon-monster-data.js?v=ballon-monster-1";
+import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=firebase-live-20261009-1";
+import { getStore, beerPongAdminGame } from "./store.js?v=firebase-live-20261009-1";
+import { serverNow } from "./time.js?v=firebase-live-20261009-1";
+import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=firebase-live-20261009-1";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, CHALLENGE_STATIONS, normaliseGameChallengesAdmin, challengeEstimateQuestions, stationById, challengeTimerRemaining, calculateGameChallenges } from "./challenges-data.js?v=firebase-live-20261009-1";
+import { BEER_PONG, normaliseBeerPongAdmin, beerPongMatchList, calculateBeerPongGroupTable, beerPongTieGroups } from "./beer-pong-data.js?v=firebase-live-20261009-1";
+import { BALLOON_MONSTER, normaliseBalloonMonsterAdmin, balloonTimerRemaining, balloonRanking } from "./balloon-monster-data.js?v=firebase-live-20261009-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -209,7 +210,7 @@ $("#saveBeerPongTieBreak").addEventListener("click", async () => { const ranks =
 $("#evaluateBeerPongGroups").addEventListener("click", async () => { try { await store.evaluateBeerPongGroups(); toast("Gruppenphase ausgewertet"); } catch (error) { beerPongError(error); } });
 $("#releaseBeerPongSemifinals").addEventListener("click", async () => { try { await store.releaseBeerPongSemifinals(); toast("Halbfinalpaarungen freigegeben"); } catch (error) { beerPongError(error); } });
 $("#releaseBeerPongFinal").addEventListener("click", async () => { try { await store.releaseBeerPongFinal(); toast("Final Battle freigegeben"); } catch (error) { beerPongError(error); } });
-$("#finishBeerPong").addEventListener("click", async () => { try { await store.finishBeerPong(); toast("Beer-Pong-Turnier abgeschlossen · Tagespunkte verbucht"); } catch (error) { beerPongError(error); } });
+$("#finishBeerPong").addEventListener("click", async () => { try { await store.finishBeerPong(); toast("Beer-Pong-Turnier abgeschlossen · Resultat bis zur Enthüllung geschützt"); } catch (error) { beerPongError(error); } });
 $("#resetBeerPongFinal").addEventListener("click", async () => { if (!confirm("Finale zurücksetzen? Ein vorhandenes Finalresultat und die Turnierpunkte werden entfernt.")) return; try { await store.resetBeerPongFinal(); toast("Finale zurückgesetzt"); } catch (error) { beerPongError(error); } });
 $("#resetBeerPongKnockouts").addEventListener("click", async () => { if (!confirm("Gesamte KO-Phase zurücksetzen? Halbfinal- und Finalresultate sowie Turnierpunkte werden entfernt. Die Gruppenspiele bleiben erhalten.")) return; try { await store.resetBeerPongKnockouts(); toast("KO-Phase zurückgesetzt"); } catch (error) { beerPongError(error); } });
 $("#revealRegnumWinner").addEventListener("click", async () => { if (!confirm("Jetzt den Gesamtsieger von Regnum Noctis auf allen Seiten enthüllen?")) return; try { await store.revealRegnumWinner(); toast("Gesamtsieger enthüllt"); } catch (error) { beerPongError(error); } });
@@ -219,7 +220,11 @@ if (store.demo) setAccess(true);
 else {
   $("#firebaseEmailField").classList.remove("hidden");
   $("#email").required = true;
-  store.auth.observe(user => setAccess(!!user));
+  store.auth.observe((granted, user) => {
+    setAccess(granted);
+    if (user && !user.isAnonymous && !granted) $("#loginError").textContent = "Dieses Konto ist nicht als Admin freigeschaltet.";
+    if (granted) { $("#loginError").textContent = ""; $("#password").value = ""; }
+  });
 }
 store.subscribe(state => { currentState = state; renderAdmin(state); });
 
@@ -275,7 +280,7 @@ $("#huntFindMatrix").addEventListener("click", async event => {
 $("#resultForm").addEventListener("submit", async event => {
   event.preventDefault();
   const existing = editingId ? currentState.games[editingId] : null;
-  const game = { name: $("#gameName").value.trim(), round: $("#roundName").value.trim(), resultText: $("#resultText").value.trim(), points: Object.fromEntries(TEAMS.map(team => [team.id, Number($(`#score-${team.id}`).value) || 0])), createdAt: existing?.createdAt || Date.now(), updatedAt: Date.now() };
+  const game = { name: $("#gameName").value.trim(), round: $("#roundName").value.trim(), resultText: $("#resultText").value.trim(), points: Object.fromEntries(TEAMS.map(team => [team.id, Number($(`#score-${team.id}`).value) || 0])), createdAt: existing?.createdAt || serverNow(), updatedAt: serverNow() };
   try { await store.saveGame(game, editingId); toast(editingId ? "Resultat korrigiert" : "Resultat gespeichert"); resetForm(); } catch (error) { $("#saveMessage").textContent = `Fehler: ${error.message}`; }
 });
 $("#cancelEdit").addEventListener("click", resetForm);
@@ -378,14 +383,14 @@ function renderBalloonRanking(game, ranked = balloonRanking(game?.publicResults)
   return rows.join("");
 }
 
-function effectiveBalloonPhase(game) { return game?.phase === "spinning" && Date.now() >= Number(game.spin?.endsAt || 0) ? "selected" : game?.phase || "idle"; }
+function effectiveBalloonPhase(game) { return game?.phase === "spinning" && serverNow() >= Number(game.spin?.endsAt || 0) ? "selected" : game?.phase || "idle"; }
 function formatCountdown(ms) { const seconds = Math.max(0, Math.ceil(Number(ms || 0) / 1000)); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
 function balloonFinalSummary(game) { const ranked = balloonRanking(game?.publicResults); return ranked.ranking.map(id => `${ranked.placements[id]}. ${teamById(id)?.name}: ${game.publicResults[id].balloons} Ballons → +${TEAMS.length + 1 - ranked.placements[id]}`).join("\n"); }
 function balloonError(error) { $("#balloonMonsterMessage").textContent = error.message; toast(error.message); }
 setInterval(() => {
   const game = currentState?.games?.[BALLOON_MONSTER.id];
   if (game?.status !== "running") return;
-  if (game.phase === "spinning" && Date.now() >= Number(game.spin?.endsAt || 0)) $("#balloonCurrentPhase").textContent = "Ausgelost";
+  if (game.phase === "spinning" && serverNow() >= Number(game.spin?.endsAt || 0)) $("#balloonCurrentPhase").textContent = "Ausgelost";
   if (game.phase !== "timer" || game.timer?.status !== "running") return;
   const remaining = balloonTimerRemaining(game.timer), expired = remaining <= 0;
   $("#balloonAdminTimer").textContent = expired ? "ZEIT ABGELAUFEN" : formatCountdown(remaining);
@@ -394,7 +399,7 @@ setInterval(() => {
 }, 250);
 
 function renderBeerPongAdmin(state) {
-  const game = state?.games?.[BEER_PONG.id];
+  const game = beerPongAdminGame(state?.games?.[BEER_PONG.id], beerPongAdmin);
   const status = game?.status || "not-started", running = status === "running", completed = status === "completed";
   $("#beerPongAdminStatus").textContent = GAME_STATUSES[status] || GAME_STATUSES["not-started"];
   $("#startBeerPong").classList.toggle("hidden", status !== "not-started");
@@ -410,7 +415,7 @@ function renderBeerPongAdmin(state) {
     groups: "Matches starten, Resultate speichern und danach einzeln veröffentlichen.",
     semifinals: "Die Halbfinalpaarungen basieren auf der freigegebenen Gruppenrangliste.",
     final: "Zehn Becher pro Seite · ohne Zeitlimit.",
-    completed: "Die Turnierpunkte sind einmalig in der Tagesrangliste verbucht. Korrekturen bleiben über die Rücksetzbuttons möglich."
+    completed: "Das Resultat bleibt bis zur bewussten Enthüllung geschützt. Korrekturen bleiben über die Rücksetzbuttons möglich."
   };
   $("#beerPongPhase").textContent = phaseLabels[game.phase] || phaseLabels.groups;
   $("#beerPongPhaseHelp").textContent = phaseHelp[game.phase] || "";
@@ -464,7 +469,7 @@ function renderBeerPongMatchAdmin(game, match, running) {
 function beerPongError(error) { $("#beerPongMessage").textContent = error.message; toast(error.message); }
 function teamById(id) { return TEAMS.find(team => team.id === id); }
 function signedNumber(value) { const number = Number(value || 0); return number > 0 ? `+${number}` : String(number); }
-function beerPongCountdown(endsAt) { const seconds = Math.max(0, Math.ceil((Number(endsAt || 0) - Date.now()) / 1000)); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
+function beerPongCountdown(endsAt) { const seconds = Math.max(0, Math.ceil((Number(endsAt || 0) - serverNow()) / 1000)); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
 setInterval(() => document.querySelectorAll("[data-bp-admin-ends]").forEach(element => { element.textContent = `Läuft · ${beerPongCountdown(element.dataset.bpAdminEnds)}`; }), 500);
 
 function renderGameChallengesAdmin(state) {
@@ -491,8 +496,9 @@ function renderGameChallengesAdmin(state) {
   const published = !!game.roundPublished?.[`round-${challengeReviewRound}`];
   $("#publishChallengeRound").textContent = published ? "Veröffentlichung aktualisieren" : "Runde veröffentlichen";
   $("#nextChallengeRound").classList.toggle("hidden", !running || challengeReviewRound !== round || round >= 5 || !published);
-  $("#revealChallengeEstimate").classList.toggle("hidden", !!game.estimateRevealed || !running);
-  $("#challengeEstimateRevealHelp").textContent = game.estimateRevealed ? "✓ Lösungen und Schätzungen sind veröffentlicht. Korrekturen werden automatisch aktualisiert." : "Die Lösungen und Schätzungen werden erst nach allen fünf veröffentlichten Runden sichtbar.";
+  $("#revealChallengeEstimate").classList.toggle("hidden", !running && !completed);
+  $("#revealChallengeEstimate").textContent = game.estimateRevealed ? "Schätz-Korrekturen veröffentlichen" : "Schätz-Challenge auflösen";
+  $("#challengeEstimateRevealHelp").textContent = game.estimateRevealed ? "✓ Lösungen und Schätzungen sind veröffentlicht. Gespeicherte Korrekturen werden erst durch erneute Freigabe sichtbar." : "Die Lösungen und Schätzungen werden erst nach allen fünf veröffentlichten Runden sichtbar.";
   renderChallengeEstimateEditors();
   const finalReady = completed || (!!game.estimateRevealed && Array.from({ length: 5 }, (_, i) => game.roundPublished?.[`round-${i + 1}`]).every(Boolean));
   $("#challengeFinalisation").classList.toggle("hidden", !finalReady);
@@ -784,6 +790,7 @@ function resetForm() { editingId = null; $("#resultForm").reset(); TEAMS.forEach
 function toast(message) { $("#toast").textContent = message; $("#toast").classList.add("show"); setTimeout(() => $("#toast").classList.remove("show"), 2200); }
 async function withDisabled(button, action) { button.disabled = true; try { await action(); } catch (error) { toast(`Speichern fehlgeschlagen: ${error.message}`); } finally { button.disabled = false; } }
 function setAccess(granted) {
+  if (!granted) $("#password").value = "";
   $("#loginPanel").classList.toggle("hidden", granted); $("#adminContent").classList.toggle("hidden", !granted); $("#logoutBtn").classList.toggle("hidden", !granted);
   if (granted && !songAnswersUnsubscribe) songAnswersUnsubscribe = store.subscribeSongBattleAnswers(answers => { songAnswers = answers; if (currentState) renderSongBattleAdmin(currentState); });
   if (granted && !songParticipantsUnsubscribe) songParticipantsUnsubscribe = store.subscribeSongBattleParticipants(participants => { songParticipants = participants; if (currentState) renderSongBattleAdmin(currentState); });

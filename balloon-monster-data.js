@@ -1,4 +1,5 @@
-import { TEAMS } from "./data.js?v=ballon-monster-1";
+import { TEAMS } from "./data.js?v=firebase-live-20261009-1";
+import { serverNow } from "./time.js?v=firebase-live-20261009-1";
 
 export const BALLOON_MONSTER = {
   id: "ballon-monster",
@@ -14,13 +15,13 @@ export function emptyBalloonTimer() {
   return { status: "idle", durationMs: BALLOON_MONSTER.timerSeconds * 1000, remainingMs: BALLOON_MONSTER.timerSeconds * 1000, startedAt: 0, endsAt: 0 };
 }
 
-export function balloonTimerRemaining(timer, now = Date.now()) {
+export function balloonTimerRemaining(timer, now = serverNow()) {
   if (timer?.status === "running") return Math.max(0, Number(timer.endsAt || 0) - now);
   return Math.max(0, Number(timer?.remainingMs ?? BALLOON_MONSTER.timerSeconds * 1000));
 }
 
 export function buildBalloonMonster(status = "not-started", existing = null) {
-  const now = Date.now(), running = status === "running", completed = status === "completed";
+  const now = serverNow(), running = status === "running", completed = status === "completed";
   return {
     name: BALLOON_MONSTER.name,
     round: BALLOON_MONSTER.round,
@@ -62,8 +63,8 @@ export function cleanBalloonSupply(value) {
 
 export function cleanBalloonResult(value, supply) {
   const balloons = Number(value), maximum = cleanBalloonSupply(supply);
-  if (!Number.isInteger(balloons) || balloons < 0 || balloons > maximum) throw new Error(`Bitte eine ganze Zahl zwischen 0 und ${maximum} eintragen.`);
-  return { balloons, savedAt: Date.now() };
+  if (!(typeof value === "number" || typeof value === "string" && value.trim() !== "") || !Number.isInteger(balloons) || balloons < 0 || balloons > maximum) throw new Error(`Bitte eine ganze Zahl zwischen 0 und ${maximum} eintragen.`);
+  return { balloons, savedAt: serverNow() };
 }
 
 export function balloonRanking(publicResults = {}) {
@@ -83,7 +84,7 @@ export function publishBalloonResult(gameValue, adminValue, teamId) {
   if (!TEAMS.some(team => team.id === teamId) || (!correction && game.currentTeamId !== teamId)) throw new Error("Dieses Reich ist aktuell nicht an der Reihe.");
   const draft = admin.drafts[teamId];
   if (!draft) throw new Error("Bitte das Ergebnis zuerst speichern und kontrollieren.");
-  game.publicResults[teamId] = { balloons: draft.balloons, publishedAt: Date.now() };
+  game.publicResults[teamId] = { balloons: draft.balloons, publishedAt: serverNow() };
   const scored = balloonRanking(game.publicResults);
   game.ranking = scored.ranking;
   game.placements = scored.placements;
@@ -91,7 +92,7 @@ export function publishBalloonResult(gameValue, adminValue, teamId) {
     game.phase = "result";
     game.timer = emptyBalloonTimer();
   }
-  game.updatedAt = Date.now();
+  game.updatedAt = serverNow();
   return completedCorrection ? completeBalloonMonster({ ...game, status: "running", pointsAwardedAt: game.pointsAwardedAt }) : game;
 }
 
@@ -101,7 +102,7 @@ export function completeBalloonMonster(gameValue) {
   if (TEAMS.some(team => !Number.isInteger(Number(game.publicResults?.[team.id]?.balloons)))) throw new Error("Bitte zuerst für alle fünf Reiche ein Ergebnis veröffentlichen.");
   const { ranking, placements } = balloonRanking(game.publicResults), points = emptyTeamValues();
   ranking.forEach(teamId => { points[teamId] = TEAMS.length + 1 - placements[teamId]; });
-  const now = Date.now();
+  const now = serverNow();
   return {
     ...game,
     status: "completed",
@@ -130,7 +131,7 @@ export function announceBalloonTeam(gameValue, teamId, automatic = false) {
   const game = cloneGame(gameValue);
   if (game.status !== "running" || game.currentTeamId) throw new Error("Zuerst den aktuellen Durchgang abschliessen oder die Auslosung zurücknehmen.");
   if (!game.remainingTeamIds.includes(teamId)) throw new Error("Dieses Reich ist nicht mehr in der Auslosung.");
-  const now = Date.now();
+  const now = serverNow();
   game.currentTeamId = teamId;
   game.remainingTeamIds = game.remainingTeamIds.filter(id => id !== teamId);
   game.drawnOrder = [...game.drawnOrder, teamId];
@@ -151,7 +152,7 @@ export function undoBalloonDraw(gameValue) {
   game.phase = "wheel";
   game.spin = null;
   game.timer = emptyBalloonTimer();
-  game.updatedAt = Date.now();
+  game.updatedAt = serverNow();
   return game;
 }
 

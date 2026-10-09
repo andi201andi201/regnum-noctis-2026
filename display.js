@@ -1,14 +1,15 @@
-import { TEAMS, totalsFromGames, formatTime, NOVITIUS_GAME } from "./data.js?v=ballon-monster-1";
-import { getStore } from "./store.js?v=ballon-monster-1";
-import { huntFinds, huntProgress } from "./hunt-data.js?v=ballon-monster-1";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, stationById, challengeTimerRemaining } from "./challenges-data.js?v=ballon-monster-1";
-import { BEER_PONG, beerPongMatchList, calculateBeerPongGroupTable } from "./beer-pong-data.js?v=ballon-monster-1";
-import { BALLOON_MONSTER, balloonTimerRemaining, balloonRanking } from "./balloon-monster-data.js?v=ballon-monster-1";
+import { TEAMS, totalsFromGames, formatTime, NOVITIUS_GAME } from "./data.js?v=firebase-live-20261009-1";
+import { getStore } from "./store.js?v=firebase-live-20261009-1";
+import { huntFinds, huntProgress } from "./hunt-data.js?v=firebase-live-20261009-1";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, stationById, challengeTimerRemaining } from "./challenges-data.js?v=firebase-live-20261009-1";
+import { BEER_PONG, beerPongMatchList, calculateBeerPongGroupTable } from "./beer-pong-data.js?v=firebase-live-20261009-1";
+import { BALLOON_MONSTER, balloonTimerRemaining, balloonRanking } from "./balloon-monster-data.js?v=firebase-live-20261009-1";
+import { serverNow } from "./time.js?v=firebase-live-20261009-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
 let currentState = null, lastBalloonMonsterMarkup = "";
-$("#displayConnection").textContent = store.demo ? "Lokaler Demomodus" : "Live verbunden";
+$("#displayConnection").textContent = window.regnumConnectionState === true ? "Live verbunden" : "Verbindung wird hergestellt";
 store.subscribe(render);
 
 function render(state) {
@@ -32,7 +33,7 @@ function render(state) {
 function renderBalloonMonster(state) {
   const game = state.games?.[BALLOON_MONSTER.id], beer = state.games?.[BEER_PONG.id];
   const beerVisible = beer?.status === "running" || (beer?.status === "completed" && !beer.finalReveal);
-  const visible = !beerVisible && (game?.status === "running" || (game?.status === "completed" && Date.now() - Number(game.updatedAt || 0) < 30000));
+  const visible = !beerVisible && (game?.status === "running" || (game?.status === "completed" && serverNow() - Number(game.updatedAt || 0) < 30000));
   document.body.classList.toggle("balloon-monster-active", visible);
   $("#displayBalloonMonster").classList.toggle("hidden", !visible);
   if (!visible) { lastBalloonMonsterMarkup = ""; return; }
@@ -43,7 +44,7 @@ function renderBalloonMonster(state) {
 }
 
 function balloonMonsterArena(game) {
-  const phase = game.phase === "spinning" && Date.now() >= Number(game.spin?.endsAt || 0) ? "selected" : game.phase;
+  const phase = game.phase === "spinning" && serverNow() >= Number(game.spin?.endsAt || 0) ? "selected" : game.phase;
   const team = teamById(game.currentTeamId), ranking = balloonRanking(game.publicResults), wheelCount = Number(game.remainingTeamIds?.length || 0) + (phase === "spinning" ? 1 : 0);
   const head = `<header class="balloon-tv-head"><div><p class="eyebrow">Spiel 1 · Die Prüfung der fünf Reiche</p><h1>🎈 Ballon-Monster</h1></div><span>${game.status === "completed" ? "Abgeschlossen" : `${wheelCount} Reiche in der Auslosung`}</span></header>`;
   if (game.status === "completed") return `${head}<div class="balloon-tv-final"><p>DIE PRÜFUNG IST ENTSCHIEDEN</p><h2>Endrangliste</h2>${balloonTvRanking(game, ranking, true)}<strong>${(game.winnerIds || []).map(id => teamById(id)?.name).join(" & ")} triumphiert${(game.winnerIds || []).length > 1 ? "en" : ""}!</strong></div>`;
@@ -59,7 +60,7 @@ function balloonMonsterArena(game) {
   return `${head}<div class="balloon-tv-intro"><h2>Bereit für das nächste Reich</h2></div>`;
 }
 
-function balloonCrestDraw(game, now = Date.now()) {
+function balloonCrestDraw(game, now = serverNow()) {
   const ids = TEAMS.map(team => team.id).filter(id => id === game.currentTeamId || game.remainingTeamIds?.includes(id));
   const startedAt = Number(game.spin?.startedAt || now), endsAt = Number(game.spin?.endsAt || startedAt + 6000);
   const duration = Math.max(1, endsAt - startedAt), elapsed = Math.max(0, Math.min(duration, now - startedAt)), progress = elapsed / duration;
@@ -95,8 +96,7 @@ function renderBeerPong(state, totals) {
 
 function beerPongArena(game) {
   if (game.status === "completed") {
-    const champion = teamById(game.ranking?.[0]);
-    return `<div class="beer-pong-arena-head"><div><p class="eyebrow">Battle of the Five Realms</p><h1>🍺 Beer Pong</h1></div><span>Turnier beendet</span></div><div class="beer-pong-champion" style="--team:${champion?.color || "#d9b665"}"><p>Turniersieger</p><img src="${champion?.logo || ""}" alt=""><h2>🏆 ${escapeHtml(champion?.name || "")}</h2><ol>${(game.ranking || []).map((id, index) => { const team = teamById(id); return `<li style="--team:${team?.color || "#888"}"><b>${index + 1}. ${team?.marker || ""} ${escapeHtml(team?.name || id)}</b><span>+${Number(game.points?.[id] || 0)}</span></li>`; }).join("")}</ol><strong>Die Tagesrangliste bleibt verborgen</strong><small>Wartet auf die Enthüllung des Regnum-Noctis-Siegers …</small></div>`;
+    return `<div class="beer-pong-arena-head"><div><p class="eyebrow">Battle of the Five Realms</p><h1>🍺 Beer Pong</h1></div><span>Turnier beendet</span></div><div class="beer-pong-champion" style="--team:#d9b665"><p>Die Final Battle ist entschieden</p><h2>Die Reiche warten auf die Enthüllung</h2><strong>Resultat und Tagesrangliste bleiben verborgen</strong><small>Die Spielleitung verkündet gleich den Regnum-Noctis-Sieger …</small></div>`;
   }
   const phase = game.phase || "groups";
   return `<div class="beer-pong-arena-head"><div><p class="eyebrow">Battle of the Five Realms</p><h1>🍺 Beer Pong</h1></div><span>${phase === "groups" ? "Gruppenphase" : phase === "semifinals" ? "Halbfinals" : "The Final Battle"}</span></div>${phase === "groups" ? beerPongGroups(game) : phase === "semifinals" ? beerPongSemifinals(game) : beerPongFinal(game)}${beerPongRules(phase)}`;
@@ -146,7 +146,7 @@ function renderRegnumWinner(totals) {
   $("#displayRegnumWinner").innerHTML = `<div class="regnum-winner-rays"></div><p class="eyebrow">Das Schicksal ist entschieden</p><h1>${winners.length > 1 ? "Herrscher des Regnum Noctis 2026" : "Herrscher des Regnum Noctis 2026"}</h1><div class="regnum-winner-crests">${winners.map(team => `<article style="--team:${team.color}"><img src="${team.logo}" alt=""><h2>${team.marker} ${escapeHtml(team.name)}</h2><strong>${best} Punkte</strong></article>`).join("")}</div><p>Die Nacht gehört euch.</p>`;
 }
 
-function beerPongCountdown(endsAt) { const seconds = Math.max(0, Math.ceil((Number(endsAt || 0) - Date.now()) / 1000)); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
+function beerPongCountdown(endsAt) { const seconds = Math.max(0, Math.ceil((Number(endsAt || 0) - serverNow()) / 1000)); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
 function updateBeerPongTimers() { document.querySelectorAll("[data-bp-ends]").forEach(element => { element.textContent = beerPongCountdown(element.dataset.bpEnds); }); }
 setInterval(updateBeerPongTimers, 500);
 function teamById(id) { return TEAMS.find(team => team.id === id); }
@@ -177,18 +177,26 @@ function updateChallengeTimer() {
 setInterval(updateChallengeTimer, 250);
 
 function renderNovitius(state) {
-  const game = state.games?.[NOVITIUS_GAME.id], visible = game?.status === "running" && Number(game.currentQuestion || 0) > 0;
+  const game = state.games?.[NOVITIUS_GAME.id], beer = state.games?.[BEER_PONG.id];
+  const beerVisible = beer?.status === "running" || (beer?.status === "completed" && !beer.finalReveal);
+  const completed = game?.status === "completed";
+  const recentResult = completed && serverNow() - Number(game.updatedAt || 0) < 30000;
+  const visible = !beerVisible && (game?.status === "running" && Number(game.currentQuestion || 0) > 0 || recentResult);
   $("#displayNovitius").classList.toggle("hidden", !visible);
   if (!visible) return;
-  const number = Number(game.currentQuestion), key = `question-${number}`, question = game.currentQuestionData, reveal = game.publicReveals?.[key];
+  const number = completed ? NOVITIUS_GAME.questionCount : Number(game.currentQuestion), key = `question-${number}`, question = game.currentQuestionData, reveal = game.publicReveals?.[key];
   const submissions = Object.keys(state.novitiusSubmissions?.[key] || {}).length;
   const eligible = Object.values(game.teamSizes || {}).reduce((sum, count) => sum + Number(count || 0), 0);
   if (!reveal) {
     $("#displayNovitiusContent").innerHTML = `<span>Frage ${number} / ${NOVITIUS_GAME.questionCount}</span><strong>${escapeHtml(question?.text || "Warte auf die nächste Frage …")}</strong><em>Antworten: ${submissions} / ${eligible} abgegeben</em>`;
     return;
   }
-  $("#displayNovitiusContent").innerHTML = `<span>Frage ${number} aufgelöst</span><strong>Richtige Antwort: ${escapeHtml(formatNovitiusValue(reveal.correctValue, reveal.unit))}</strong><ol>${(reveal.ranking || []).map((id, index) => { const team = TEAMS.find(item => item.id === id); return `<li><b>${index + 1}. ${team?.marker || ""} ${team?.name || id}</b><em>${Number(reveal.teamTotals?.[id] || 0).toFixed(2)}</em></li>`; }).join("")}</ol>`;
+  const ranking = completed ? game.ranking || [] : reveal.ranking || [];
+  const teamPoints = completed ? game.internalPoints : reveal.teamTotals;
+  $("#displayNovitiusContent").innerHTML = `<span>${completed ? "Quiz abgeschlossen" : `Frage ${number} aufgelöst`}</span><strong>${completed ? "Team-Endwertung" : `Richtige Antwort: ${escapeHtml(formatNovitiusValue(reveal.correctValue, reveal.unit))}`}</strong><ol>${ranking.map((id, index) => { const team = TEAMS.find(item => item.id === id); return `<li><b>${index + 1}. ${team?.marker || ""} ${team?.name || id}</b><em>${Number(teamPoints?.[id] || 0).toFixed(2)}</em></li>`; }).join("")}</ol><span>Top 10 · Einzelwertung</span><ol>${(reveal.top10 || []).map((participant, index) => { const team = TEAMS.find(item => item.id === participant.teamId); return `<li><b>${index + 1}. ${team?.marker || ""} ${escapeHtml(participant.playerName)}</b><em>${Number(participant.points || 0)}</em></li>`; }).join("")}</ol>`;
 }
+
+setInterval(() => { if (currentState?.games?.[NOVITIUS_GAME.id]?.status === "completed") renderNovitius(currentState); }, 1000);
 
 function formatNovitiusValue(value, unit = "") { const formatted = typeof value === "number" ? new Intl.NumberFormat("de-CH").format(value) : String(value); return `${formatted}${unit ? ` ${unit}` : ""}`; }
 

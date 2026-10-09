@@ -1,17 +1,27 @@
-import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
-import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, rebuildNovitiusReveals, finalizeNovitiusGame, scoreNovitiusAnswer } from "./data.js?v=ballon-monster-1";
-import { HUNT_DEFAULT_TARGETS, HUNT_POINTS_PER_OBJECT, normaliseHuntTargets, huntTargetList } from "./hunt-data.js?v=ballon-monster-1";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, buildGameChallenges, normaliseGameChallengesAdmin, cleanEstimateQuestion, cleanChallengeResult, cleanEstimateValue, buildChallengePublicRound, buildPublicEstimate, calculateGameChallenges, challengeEstimateQuestions, challengeTimerRemaining, emptyChallengeTimer } from "./challenges-data.js?v=ballon-monster-1";
-import { BEER_PONG, buildBeerPong, normaliseBeerPongAdmin, cleanBeerPongResult, publicBeerPongMatch, evaluateBeerPongGroups, releaseBeerPongSemifinals, releaseBeerPongFinal, completeBeerPong, resetBeerPongKnockouts, resetBeerPongFinal } from "./beer-pong-data.js?v=ballon-monster-1";
-import { BALLOON_MONSTER, buildBalloonMonster, normaliseBalloonMonsterAdmin, cleanBalloonSupply, cleanBalloonResult, announceBalloonTeam, undoBalloonDraw, emptyBalloonTimer, balloonTimerRemaining, publishBalloonResult, completeBalloonMonster } from "./balloon-monster-data.js?v=ballon-monster-1";
+import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js?v=firebase-live-20261009-1";
+import "./status.js?v=firebase-live-20261009-1";
+import { serverNow, setServerTimeOffset } from "./time.js?v=firebase-live-20261009-1";
+import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, rebuildNovitiusReveals, finalizeNovitiusGame, scoreNovitiusAnswer } from "./data.js?v=firebase-live-20261009-1";
+import { HUNT_DEFAULT_TARGETS, HUNT_POINTS_PER_OBJECT, normaliseHuntTargets, huntTargetList } from "./hunt-data.js?v=firebase-live-20261009-1";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, buildGameChallenges, normaliseGameChallengesAdmin, cleanEstimateQuestion, cleanChallengeResult, cleanEstimateValue, buildChallengePublicRound, buildPublicEstimate, calculateGameChallenges, challengeEstimateQuestions, challengeTimerRemaining, emptyChallengeTimer } from "./challenges-data.js?v=firebase-live-20261009-1";
+import { BEER_PONG, buildBeerPong, normaliseBeerPongAdmin, cleanBeerPongResult, publicBeerPongMatch, evaluateBeerPongGroups, releaseBeerPongSemifinals, releaseBeerPongFinal, completeBeerPong, resetBeerPongKnockouts, resetBeerPongFinal } from "./beer-pong-data.js?v=firebase-live-20261009-1";
+import { BALLOON_MONSTER, buildBalloonMonster, normaliseBalloonMonsterAdmin, cleanBalloonSupply, cleanBalloonResult, announceBalloonTeam, undoBalloonDraw, emptyBalloonTimer, balloonTimerRemaining, publishBalloonResult, completeBalloonMonster } from "./balloon-monster-data.js?v=firebase-live-20261009-1";
 
 const STORAGE_KEY = "regnum-noctis-demo";
 let firebase = null;
 let storeInstance = null;
+let storePromise = null;
+let anonymousPromise = null;
+let activeAdminOperation = null;
 
 export async function getStore() {
   if (storeInstance) return storeInstance;
-  if (!isFirebaseConfigured) return (storeInstance = localStore());
+  if (!isFirebaseConfigured) throw new Error("Die Firebase-Datenbank-URL fehlt. Bitte die Konfiguration vervollständigen.");
+  if (!storePromise) storePromise = initializeFirebaseStore();
+  return storePromise;
+}
+
+async function initializeFirebaseStore() {
   if (!firebase) {
     const [{ initializeApp }, auth, database] = await Promise.all([
       import("https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js"),
@@ -19,9 +29,113 @@ export async function getStore() {
       import("https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js")
     ]);
     const app = initializeApp(firebaseConfig);
-    firebase = { auth: auth.getAuth(app), db: database.getDatabase(app), ...auth, ...database };
+    firebase = { auth: auth.getAuth(app), db: database.getDatabase(app, firebaseConfig.databaseURL), ...auth, ...database };
+    fenceAdminWrites();
+    await firebase.auth.authStateReady();
+    await new Promise((resolve, reject) => firebase.onValue(firebase.ref(firebase.db, ".info/serverTimeOffset"), snapshot => { setServerTimeOffset(snapshot.val()); resolve(); }, reject));
+    firebase.onValue(firebase.ref(firebase.db, ".info/connected"), snapshot => window.dispatchEvent(new CustomEvent("regnum-connection", { detail: { connected: snapshot.val() === true } })));
   }
-  return (storeInstance = firebaseStore());
+  return (storeInstance = serialiseAdminActions(firebaseStore()));
+}
+
+async function ensureAnonymous() {
+  await firebase.auth.authStateReady();
+  if (firebase.auth.currentUser) {
+    if (!firebase.auth.currentUser.isAnonymous) throw new Error("Bitte für die Teilnahme ein separates Browserfenster verwenden.");
+    return firebase.auth.currentUser;
+  }
+  if (!anonymousPromise) anonymousPromise = firebase.signInAnonymously(firebase.auth).finally(() => { anonymousPromise = null; });
+  return (await anonymousPromise).user;
+}
+
+async function ensurePlayer(profile) {
+  const user = await ensureAnonymous();
+  if (!TEAMS.some(team => team.id === profile?.teamId) || !String(profile?.name || "").trim()) throw new Error("Bitte Name und Reich wählen.");
+  const playerRef = firebase.ref(firebase.db, `players/${user.uid}`);
+  const result = await firebase.runTransaction(playerRef, current => current ? undefined : { teamId: profile.teamId, playerName: profile.name.trim().slice(0, 32), joinedAt: firebase.serverTimestamp() }, { applyLocally: false });
+  const player = result.snapshot.val();
+  if (player?.teamId !== profile.teamId) throw new Error("Dieses Gerät ist bereits für ein anderes Reich angemeldet.");
+  return { ...profile, teamId: player.teamId, name: player.playerName };
+}
+
+// Eine gemeinsame Sperre serialisiert mehrpfadige Admin-Korrekturen auf allen Geräten.
+function serialiseAdminActions(store) {
+  const participantActions = new Set(["claimSongBattleTeam", "submitSongBattleAnswer", "claimNovitiusParticipant", "submitNovitiusAnswer", "claimHuntObject", "submitOracleAnswer"]);
+  let queue = Promise.resolve();
+  for (const [name, action] of Object.entries(store)) {
+    if (typeof action !== "function" || name.startsWith("subscribe") || participantActions.has(name)) continue;
+    store[name] = (...args) => {
+      const operation = queue.then(() => withAdminOperation(() => action(...args)));
+      queue = operation.catch(() => {});
+      return operation;
+    };
+  }
+  return store;
+}
+
+async function withAdminOperation(action) {
+  const user = firebase.auth.currentUser;
+  if (!user || user.isAnonymous || !(await firebase.get(firebase.ref(firebase.db, `admins/${user.uid}`))).val()) throw new Error("Keine Adminberechtigung.");
+  const operationId = crypto.randomUUID(), lockRef = firebase.ref(firebase.db, "adminOperationLock");
+  let stopLock;
+  await new Promise((resolve, reject) => { stopLock = firebase.onValue(lockRef, () => resolve(), reject); });
+  const result = await firebase.runTransaction(lockRef, current => {
+    if (current && current.expiresAt > serverNow()) return;
+    return { owner: user.uid, operationId, expiresAt: serverNow() + 90000 };
+  }, { applyLocally: false });
+  if (!result.committed) { stopLock(); throw new Error("Eine andere Adminaktion läuft gerade. Bitte kurz warten und erneut versuchen."); }
+  activeAdminOperation = { owner: user.uid, operationId };
+  const renewal = setInterval(() => {
+    firebase.runTransaction(lockRef, current => current?.operationId === operationId ? { ...current, expiresAt: serverNow() + 90000 } : undefined, { applyLocally: false }).catch(reportStoreError);
+  }, 30000);
+  try { return await action(); }
+  finally {
+    activeAdminOperation = null;
+    clearInterval(renewal);
+    if (firebase.auth.currentUser?.uid === user.uid) await firebase.runTransaction(lockRef, current => !current || current.operationId === operationId ? null : undefined, { applyLocally: false }).catch(reportStoreError);
+    stopLock();
+  }
+}
+
+function referencePath(reference) {
+  const parts = [];
+  for (let current = reference; current?.key !== null; current = current.parent) parts.unshift(current.key);
+  return parts.join("/");
+}
+
+function fenceAdminWrites() {
+  const original = { set: firebase.set, update: firebase.update, remove: firebase.remove, runTransaction: firebase.runTransaction };
+  const guardedUpdate = (reference, values) => {
+    if (!activeAdminOperation) return original.update(reference, values);
+    const prefix = referencePath(reference);
+    const updates = Object.fromEntries(Object.entries(values).map(([path, value]) => [prefix ? `${prefix}/${path}` : path, value]));
+    updates.adminOperationReceipt = { ...activeAdminOperation, updatedAt: firebase.serverTimestamp() };
+    Object.entries(updates).forEach(([path, value]) => {
+      if (/^games\/[^/]+$/.test(path) && value) updates[path] = { ...value, adminOperationId: activeAdminOperation.operationId };
+    });
+    const gameIds = new Set(Object.keys(updates).map(path => /^games\/([^/]+)\//.exec(path)?.[1]).filter(Boolean));
+    gameIds.forEach(id => { if (!Object.hasOwn(updates, `games/${id}`)) updates[`games/${id}/adminOperationId`] = activeAdminOperation.operationId; });
+    return original.update(firebase.ref(firebase.db), updates);
+  };
+  firebase.update = guardedUpdate;
+  firebase.set = (reference, value) => activeAdminOperation ? guardedUpdate(firebase.ref(firebase.db), { [referencePath(reference)]: value }) : original.set(reference, value);
+  firebase.remove = reference => activeAdminOperation ? guardedUpdate(firebase.ref(firebase.db), { [referencePath(reference)]: null }) : original.remove(reference);
+  firebase.runTransaction = (reference, reducer, options) => {
+    const operation = activeAdminOperation;
+    if (!operation || referencePath(reference) === "adminOperationLock") return original.runTransaction(reference, reducer, options);
+    return original.runTransaction(reference, current => {
+      const value = reducer(current);
+      return value && typeof value === "object" ? { ...value, adminOperationId: operation.operationId } : value;
+    }, options);
+  };
+}
+
+function reportStoreError(error) {
+  window.dispatchEvent(new CustomEvent("regnum-store-error", { detail: error }));
+}
+
+function listen(path, callback, emptyValue = {}) {
+  return firebase.onValue(firebase.ref(firebase.db, path), snapshot => callback(snapshot.val() ?? emptyValue), error => { callback(emptyValue); reportStoreError(error); });
 }
 
 function firebaseStore() {
@@ -31,51 +145,65 @@ function firebaseStore() {
       let state = normalise();
       const emit = () => callback(normalise(state));
       const stops = [
-        firebase.onValue(firebase.ref(firebase.db, "settings"), snapshot => { state.settings = snapshot.val() || {}; emit(); }),
-        firebase.onValue(firebase.ref(firebase.db, "games"), snapshot => { state.games = snapshot.val() || {}; emit(); }),
-        firebase.onValue(firebase.ref(firebase.db, "oracleAnswers"), snapshot => { state.oracleAnswers = snapshot.val() || {}; emit(); }),
-        firebase.onValue(firebase.ref(firebase.db, "novitiusSubmissions"), snapshot => { state.novitiusSubmissions = snapshot.val() || {}; emit(); })
+        listen("settings", value => { state.settings = value; emit(); }),
+        listen("games", value => { state.games = value; emit(); }),
+        listen("novitiusSubmissions", value => { state.novitiusSubmissions = value; emit(); })
       ];
       return () => stops.forEach(stop => stop());
     },
-    subscribeOracleQuestions(callback) { return firebase.onValue(firebase.ref(firebase.db, "oracleQuestions"), snapshot => callback(snapshot.val() || {})); },
-    subscribeSongBattleAnswers(callback) { return firebase.onValue(firebase.ref(firebase.db, "songBattleAnswers"), snapshot => callback(snapshot.val() || {})); },
-    subscribeSongBattleParticipants(callback) { return firebase.onValue(firebase.ref(firebase.db, "songBattleParticipants"), snapshot => callback(snapshot.val() || {})); },
-    subscribeSongBattleAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "songBattleAdmin"), snapshot => callback(normaliseSongBattleAdmin(snapshot.val()))); },
-    subscribeNovitiusAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "novitiusAdmin"), snapshot => callback(normaliseNovitiusAdmin(snapshot.val()))); },
-    subscribeNovitiusParticipants(callback) { return firebase.onValue(firebase.ref(firebase.db, "novitiusParticipants"), snapshot => callback(snapshot.val() || {})); },
-    subscribeNovitiusAnswers(callback) { return firebase.onValue(firebase.ref(firebase.db, "novitiusAnswers"), snapshot => callback(snapshot.val() || {})); },
-    subscribeGameChallengesAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "gameChallengesAdmin"), snapshot => callback(normaliseGameChallengesAdmin(snapshot.val()))); },
-    subscribeBeerPongAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "beerPongAdmin"), snapshot => callback(normaliseBeerPongAdmin(snapshot.val()))); },
-    subscribeBalloonMonsterAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "balloonMonsterAdmin"), snapshot => callback(normaliseBalloonMonsterAdmin(snapshot.val()))); },
-    subscribeHuntAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "huntAdmin"), snapshot => callback({ targets: normaliseHuntTargets(snapshot.val()?.targets) })); },
+    subscribeOracleQuestions(callback) { return listen("oracleQuestions", callback); },
+    subscribeSongBattleAnswers(callback) { return listen("songBattleAnswers", callback); },
+    subscribeSongBattleParticipants(callback) { return listen("songBattleParticipants", callback); },
+    subscribeSongBattleAdmin(callback) { return listen("songBattleAdmin", value => callback(normaliseSongBattleAdmin(value))); },
+    subscribeNovitiusAdmin(callback) { return listen("novitiusAdmin", value => callback(normaliseNovitiusAdmin(value))); },
+    subscribeNovitiusParticipants(callback) { return listen("novitiusParticipants", callback); },
+    subscribeNovitiusAnswers(callback) { return listen("novitiusAnswers", callback); },
+    subscribeGameChallengesAdmin(callback) { return listen("gameChallengesAdmin", value => callback(normaliseGameChallengesAdmin(value))); },
+    subscribeBeerPongAdmin(callback) { return listen("beerPongAdmin", value => callback(normaliseBeerPongAdmin(value))); },
+    subscribeBalloonMonsterAdmin(callback) { return listen("balloonMonsterAdmin", value => callback(normaliseBalloonMonsterAdmin(value))); },
+    subscribeHuntAdmin(callback) { return listen("huntAdmin", value => callback({ targets: normaliseHuntTargets(value?.targets) })); },
     async subscribeSongBattleTeam(teamId, callback) {
-      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      const user = await ensureAnonymous();
       let answers = {}, participant = null;
-      const emit = () => callback({ answers, participant, owned: participant?.claimantId === firebase.auth.currentUser?.uid });
-      const stops = [
-        firebase.onValue(firebase.ref(firebase.db, `songBattleAnswers/${teamId}`), snapshot => { answers = snapshot.val() || {}; emit(); }),
-        firebase.onValue(firebase.ref(firebase.db, `songBattleParticipants/${teamId}`), snapshot => { participant = snapshot.val() || null; emit(); })
-      ];
-      return () => stops.forEach(stop => stop());
+      let answersStop = null;
+      const emit = () => callback({ answers, participant, owned: participant?.claimantId === user.uid });
+      const participantStop = listen(`songBattleParticipants/${teamId}`, value => {
+        participant = value;
+        answersStop?.(); answersStop = null; answers = {};
+        if (participant?.claimantId === user.uid) answersStop = listen(`songBattleAnswers/${teamId}`, value => { answers = value; emit(); });
+        emit();
+      }, null);
+      return () => { participantStop(); answersStop?.(); };
     },
     async subscribeNovitiusPlayer(callback) {
-      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      await ensureAnonymous();
       const participantId = firebase.auth.currentUser.uid;
       let participant = null, answers = {};
       const emit = () => callback({ participantId, participant, answers });
       const stops = [
-        firebase.onValue(firebase.ref(firebase.db, `novitiusParticipants/${participantId}`), snapshot => { participant = snapshot.val() || null; emit(); }),
-        firebase.onValue(firebase.ref(firebase.db, `novitiusAnswers/${participantId}`), snapshot => { answers = snapshot.val() || {}; emit(); })
+        listen(`novitiusParticipants/${participantId}`, value => { participant = value; emit(); }, null),
+        listen(`novitiusAnswers/${participantId}`, value => { answers = value; emit(); })
       ];
       return () => stops.forEach(stop => stop());
     },
-    async saveOracleQuestion(question, id = null) { const questionRef = id ? firebase.ref(firebase.db, `oracleQuestions/${id}`) : firebase.push(firebase.ref(firebase.db, "oracleQuestions")); await firebase.set(questionRef, { ...question, updatedAt: Date.now() }); },
+    async saveOracleQuestion(question, id = null) { const questionRef = id ? firebase.ref(firebase.db, `oracleQuestions/${id}`) : firebase.push(firebase.ref(firebase.db, "oracleQuestions")); await firebase.set(questionRef, { ...question, updatedAt: serverNow() }); },
     deleteOracleQuestion(id) { return firebase.remove(firebase.ref(firebase.db, `oracleQuestions/${id}`)); },
     auth: {
-      login: (email, password) => firebase.signInWithEmailAndPassword(firebase.auth, email, password),
+      async login(email, password) {
+        await firebase.setPersistence(firebase.auth, firebase.browserSessionPersistence);
+        return firebase.signInWithEmailAndPassword(firebase.auth, email, password);
+      },
       logout: () => firebase.signOut(firebase.auth),
-      observe: callback => firebase.onAuthStateChanged(firebase.auth, callback)
+      observe(callback) {
+        let stop = null, generation = 0;
+        const authStop = firebase.onAuthStateChanged(firebase.auth, user => {
+          stop?.(); stop = null; const current = ++generation;
+          callback(false, user);
+          if (!user || user.isAnonymous || !user.providerData.some(provider => provider.providerId === "password")) return;
+          stop = listen(`admins/${user.uid}`, allowed => { if (current === generation) callback(allowed === true, user); }, false);
+        });
+        return () => { generation++; stop?.(); authStop(); };
+      }
     },
     async saveGame(game, id = null) {
       const gameRef = id ? firebase.ref(firebase.db, `games/${id}`) : firebase.push(firebase.ref(firebase.db, "games"));
@@ -86,7 +214,7 @@ function firebaseStore() {
     },
     async startSongBattle() {
       const current = (await firebase.get(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`))).val();
-      const game = buildSongBattle("running", current);
+      const game = buildSongBattle("running");
       await firebase.update(firebase.ref(firebase.db), {
         [`games/${SONG_BATTLE.id}`]: game,
         songBattleAnswers: null,
@@ -109,23 +237,23 @@ function firebaseStore() {
       return firebase.update(gameRef, { answersOpen: !!open, controlUpdatedAt: firebase.serverTimestamp() });
     },
     async claimSongBattleTeam(profile) {
-      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      profile = await ensurePlayer(profile);
       const participantRef = firebase.ref(firebase.db, `songBattleParticipants/${profile.teamId}`);
       const claimantId = firebase.auth.currentUser.uid;
-      const result = await firebase.runTransaction(participantRef, current => current || { claimantId, playerName: profile.name, joinedAt: Date.now() });
+      const result = await firebase.runTransaction(participantRef, current => current ? undefined : { claimantId, playerName: profile.name, joinedAt: firebase.serverTimestamp() }, { applyLocally: false });
       const participant = result.snapshot.val();
       return { claimed: participant?.claimantId === claimantId, participant };
     },
     releaseSongBattleTeam(teamId) { return firebase.update(firebase.ref(firebase.db), { [`songBattleParticipants/${teamId}`]: null, [`songBattleAnswers/${teamId}`]: null }); },
     async submitSongBattleAnswer(songNumber, profile, title, artist) {
-      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      profile = await ensurePlayer(profile);
       const game = (await firebase.get(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`))).val();
       if (game?.status !== "running" || Number(game.currentSong) !== Number(songNumber) || !game.answersOpen) throw new Error("song-battle-closed");
       const participant = (await firebase.get(firebase.ref(firebase.db, `songBattleParticipants/${profile.teamId}`))).val();
       if (participant?.claimantId !== firebase.auth.currentUser.uid) throw new Error("song-battle-not-participant");
       const cleanTitle = title.trim().slice(0, 120), cleanArtist = artist.trim().slice(0, 120);
       if (!cleanTitle && !cleanArtist) throw new Error("song-battle-empty");
-      const answer = { songNumber: Number(songNumber), title: cleanTitle, artist: cleanArtist, playerName: profile.name, claimantId: firebase.auth.currentUser.uid, updatedAt: Date.now() };
+      const answer = { songNumber: Number(songNumber), title: cleanTitle, artist: cleanArtist, playerName: participant.playerName, claimantId: firebase.auth.currentUser.uid, updatedAt: firebase.serverTimestamp() };
       await firebase.set(firebase.ref(firebase.db, `songBattleAnswers/${profile.teamId}/song-${songNumber}`), answer);
       return answer;
     },
@@ -135,7 +263,7 @@ function firebaseStore() {
       const admin = normaliseSongBattleAdmin(adminSnapshot.val());
       (((admin.evaluations[`song-${songNumber}`] ||= {})[teamId] ||= {}))[field] = value === true;
       admin.internalPoints = songBattleScores(admin.evaluations);
-      admin.evaluationUpdatedAt = Date.now();
+      admin.evaluationUpdatedAt = serverNow();
       const gameSnapshot = await firebase.get(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`));
       const game = gameSnapshot.val();
       const updates = { songBattleAdmin: admin };
@@ -143,6 +271,8 @@ function firebaseStore() {
         const answers = (await firebase.get(firebase.ref(firebase.db, "songBattleAnswers"))).val() || {};
         updates[`games/${SONG_BATTLE.id}/publicReveals/song-${songNumber}`] = buildSongPublicReveal(answers, admin.evaluations, songNumber);
       }
+      if (game?.status === "completed") updates[`games/${SONG_BATTLE.id}`] = finalizeSongBattle({ ...game, publicReveals: { ...game.publicReveals, [`song-${songNumber}`]: updates[`games/${SONG_BATTLE.id}/publicReveals/song-${songNumber}`] } }, admin.evaluations);
+      if (updates[`games/${SONG_BATTLE.id}`]) delete updates[`games/${SONG_BATTLE.id}/publicReveals/song-${songNumber}`];
       await firebase.update(firebase.ref(firebase.db), updates);
     },
     async revealSongBattleSong(songNumber) {
@@ -165,7 +295,10 @@ function firebaseStore() {
         firebase.get(firebase.ref(firebase.db, `games/${SONG_BATTLE.id}`)),
         firebase.get(firebase.ref(firebase.db, "songBattleAdmin"))
       ]);
-      const game = finalizeSongBattle(gameSnapshot.val(), normaliseSongBattleAdmin(adminSnapshot.val()).evaluations);
+      const current = gameSnapshot.val();
+      if (!["running", "completed"].includes(current?.status)) throw new Error("Song Battle ist nicht gestartet.");
+      for (let number = 1; number <= SONG_BATTLE.songCount; number++) if (!current.revealedSongs?.[`song-${number}`]) throw new Error("Bitte zuerst alle sechs Songs sperren, bewerten und auflösen.");
+      const game = finalizeSongBattle(current, normaliseSongBattleAdmin(adminSnapshot.val()).evaluations);
       await firebase.update(firebase.ref(firebase.db), { [`games/${SONG_BATTLE.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() });
     },
     async resetSongBattle() {
@@ -216,20 +349,22 @@ function firebaseStore() {
       const gameRef = firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`);
       const game = (await firebase.get(gameRef)).val();
       if (game?.status !== "running" || Number(game.currentQuestion || 0) > 0) throw new Error("Die Anmeldung kann nach Frage 1 nicht mehr geändert werden.");
+      if (!open) await firebase.update(gameRef, { registrationOpen: false, controlUpdatedAt: firebase.serverTimestamp() });
       const participants = (await firebase.get(firebase.ref(firebase.db, "novitiusParticipants"))).val() || {};
       return firebase.update(gameRef, { registrationOpen: !!open, participantsLocked: !open, teamSizes: open ? emptyTeamCounts() : novitiusTeamSizes(participants), controlUpdatedAt: firebase.serverTimestamp() });
     },
     async claimNovitiusParticipant(profile) {
-      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      profile = await ensurePlayer(profile);
       const participantId = firebase.auth.currentUser.uid;
       const game = (await firebase.get(firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`))).val();
       if (game?.status !== "running" || !game.registrationOpen) throw new Error("novitius-registration-closed");
-      const participant = { claimantId: participantId, playerName: profile.name, teamId: profile.teamId, joinedAt: Date.now() };
-      const result = await firebase.runTransaction(firebase.ref(firebase.db, `novitiusParticipants/${participantId}`), current => current || participant);
+      const participant = { claimantId: participantId, playerName: profile.name, teamId: profile.teamId, joinedAt: firebase.serverTimestamp() };
+      const result = await firebase.runTransaction(firebase.ref(firebase.db, `novitiusParticipants/${participantId}`), current => current ? undefined : participant, { applyLocally: false });
       return { participantId, participant: result.snapshot.val() };
     },
     removeNovitiusParticipant(participantId) { return firebase.update(firebase.ref(firebase.db), { [`novitiusParticipants/${participantId}`]: null, [`novitiusAnswers/${participantId}`]: null }); },
     async startNovitiusQuestion(number) {
+      const gameRef = firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`);
       const questionNumber = Number(number);
       if (questionNumber < 1 || questionNumber > NOVITIUS_GAME.questionCount) throw new Error("Ungültige Frage.");
       const question = (await firebase.get(firebase.ref(firebase.db, `novitiusAdmin/questions/question-${questionNumber}`))).val();
@@ -239,6 +374,7 @@ function firebaseStore() {
       if (game?.revealedQuestions?.[`question-${questionNumber}`]) throw new Error("Diese Frage wurde bereits aufgelöst und kann nicht erneut geöffnet werden.");
       if (game?.questionStates?.[`question-${questionNumber}`] && game.questionStates[`question-${questionNumber}`] !== "locked") throw new Error("Diese Frage wurde bereits freigegeben.");
       if (questionNumber > 1 && !game?.revealedQuestions?.[`question-${questionNumber - 1}`]) throw new Error("Bitte zuerst die vorherige Frage auflösen.");
+      await firebase.update(gameRef, { registrationOpen: false, controlUpdatedAt: firebase.serverTimestamp() });
       const participants = (await firebase.get(firebase.ref(firebase.db, "novitiusParticipants"))).val() || {};
       const teamSizes = game.participantsLocked ? { ...emptyTeamCounts(), ...(game.teamSizes || {}) } : novitiusTeamSizes(participants);
       if (!Object.values(teamSizes).some(Number)) throw new Error("Es ist noch niemand angemeldet.");
@@ -263,24 +399,25 @@ function firebaseStore() {
       return firebase.update(gameRef, { answersOpen: !!open, [`questionStates/question-${game.currentQuestion}`]: open ? "open" : "closed", controlUpdatedAt: firebase.serverTimestamp() });
     },
     async submitNovitiusAnswer(questionNumber, profile, value) {
-      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      profile = await ensurePlayer(profile);
       const participantId = firebase.auth.currentUser.uid;
       const game = (await firebase.get(firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`))).val();
       if (game?.status !== "running" || Number(game.currentQuestion) !== Number(questionNumber) || !game.answersOpen) throw new Error("novitius-answers-closed");
       const participant = (await firebase.get(firebase.ref(firebase.db, `novitiusParticipants/${participantId}`))).val();
       if (!participant || participant.teamId !== profile.teamId) throw new Error("novitius-not-registered");
       const cleanValue = cleanNovitiusAnswerValue(game.currentQuestionData, value);
-      const answer = { value: cleanValue, playerName: participant.playerName, teamId: participant.teamId, claimantId: participantId, createdAt: Date.now(), updatedAt: Date.now() };
-      let created = false;
-      const answerRef = firebase.ref(firebase.db, `novitiusAnswers/${participantId}/question-${questionNumber}`);
-      const result = await firebase.runTransaction(answerRef, current => { if (current) return; created = true; return answer; });
-      if (!created || !result.committed) {
-        const existing = result.snapshot.val();
-        if (existing?.claimantId === participantId) await firebase.set(firebase.ref(firebase.db, `novitiusSubmissions/question-${questionNumber}/${participantId}`), { teamId: participant.teamId, createdAt: existing.createdAt || Date.now() });
-        throw new Error("novitius-answer-exists");
+      const answer = { value: cleanValue, playerName: participant.playerName, teamId: participant.teamId, claimantId: participantId, createdAt: firebase.serverTimestamp(), updatedAt: firebase.serverTimestamp() };
+      const answerPath = `novitiusAnswers/${participantId}/question-${questionNumber}`;
+      try {
+        await firebase.update(firebase.ref(firebase.db), {
+          [answerPath]: answer,
+          [`novitiusSubmissions/question-${questionNumber}/${participantId}`]: { teamId: participant.teamId, createdAt: firebase.serverTimestamp() }
+        });
+      } catch (error) {
+        if ((await firebase.get(firebase.ref(firebase.db, answerPath))).exists()) throw new Error("novitius-answer-exists");
+        throw error;
       }
-      await firebase.set(firebase.ref(firebase.db, `novitiusSubmissions/question-${questionNumber}/${participantId}`), { teamId: participant.teamId, createdAt: Date.now() });
-      return result.snapshot.val();
+      return (await firebase.get(firebase.ref(firebase.db, answerPath))).val();
     },
     async revealNovitiusQuestion(questionNumber) {
       const [gameSnapshot, questionSnapshot, participantsSnapshot, answersSnapshot] = await Promise.all([
@@ -311,23 +448,24 @@ function firebaseStore() {
       const key = `question-${Number(questionNumber)}`, answers = answersSnapshot.val() || {};
       const questions = normaliseNovitiusAdmin(adminSnapshot.val()).questions;
       const previous = answers?.[participantId]?.[key] || {};
-      const corrected = { ...previous, value: cleanNovitiusAnswerValue(questions[key], value), playerName: participant.playerName, teamId: participant.teamId, claimantId: participantId, correctedByAdmin: true, createdAt: previous.createdAt || Date.now(), updatedAt: Date.now() };
+      const corrected = { ...previous, value: cleanNovitiusAnswerValue(questions[key], value), playerName: participant.playerName, teamId: participant.teamId, claimantId: participantId, correctedByAdmin: true, createdAt: previous.createdAt || serverNow(), updatedAt: serverNow() };
       if (game.revealedQuestions?.[key]) Object.assign(corrected, storedNovitiusScore(questions[key], corrected.value));
       ((answers[participantId] ||= {})[key]) = corrected;
       const reveals = rebuildNovitiusReveals(questions, participants, answers, game.teamSizes || {}, game.revealedQuestions || {});
-      const updates = { [`novitiusAnswers/${participantId}/${key}`]: answers[participantId][key], [`novitiusSubmissions/${key}/${participantId}`]: { teamId: participant.teamId, createdAt: Date.now() }, "settings/updatedAt": firebase.serverTimestamp() };
+      const updates = { [`novitiusAnswers/${participantId}/${key}`]: answers[participantId][key], [`novitiusSubmissions/${key}/${participantId}`]: { teamId: participant.teamId, createdAt: serverNow() }, "settings/updatedAt": firebase.serverTimestamp() };
       if (game.status === "completed") updates[`games/${NOVITIUS_GAME.id}`] = refinalizeNovitiusOrPending({ ...game, publicReveals: reveals }, questions, participants, answers);
       else updates[`games/${NOVITIUS_GAME.id}/publicReveals`] = reveals;
       await firebase.update(firebase.ref(firebase.db), updates);
     },
     async setNovitiusLiveResult(value) {
+      if (value === null || value === undefined || typeof value === "boolean" || String(value).trim() === "") throw new Error("Bitte eine gültige ganze Zahl eingeben.");
       const number = Number(value);
       if (!Number.isInteger(number) || number < 0) throw new Error("Bitte eine gültige ganze Zahl eingeben.");
       return firebase.update(firebase.ref(firebase.db), { "novitiusAdmin/questions/question-10/correctValue": number, "novitiusAdmin/liveResult": number });
     },
     async saveNovitiusTieBreak(tieBreak) {
       const ranking = buildTieBreakRanking(tieBreak);
-      return firebase.set(firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}/tieBreak`), { question: String(tieBreak.question || "").trim().slice(0, 180), correctValue: Number(tieBreak.correctValue), answers: tieBreak.answers, ranking, resolvedAt: Date.now() });
+      return firebase.set(firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}/tieBreak`), { question: String(tieBreak.question || "").trim().slice(0, 180), correctValue: Number(tieBreak.correctValue), answers: tieBreak.answers, ranking, resolvedAt: serverNow() });
     },
     async finishNovitiusGame() {
       const [gameSnapshot, adminSnapshot, participantsSnapshot, answersSnapshot] = await Promise.all([
@@ -358,7 +496,7 @@ function firebaseStore() {
     async startGameChallengeTimer() {
       const gameRef = firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`), game = (await firebase.get(gameRef)).val();
       if (game?.status !== "running") throw new Error("Game Challenges laufen nicht.");
-      const remainingMs = game?.timer?.status === "idle" ? GAME_CHALLENGES.durationSeconds * 1000 : challengeTimerRemaining(game.timer), now = Date.now();
+      const remainingMs = game?.timer?.status === "idle" ? GAME_CHALLENGES.durationSeconds * 1000 : challengeTimerRemaining(game.timer), now = serverNow();
       if (remainingMs <= 0) throw new Error("Die Zeit ist abgelaufen. Bitte die Runde beenden oder den Timer zurücksetzen.");
       await firebase.update(gameRef, { phase: "running", timer: { status: "running", durationMs: GAME_CHALLENGES.durationSeconds * 1000, remainingMs, startedAt: now, endsAt: now + remainingMs }, updatedAt: firebase.serverTimestamp() });
     },
@@ -379,12 +517,8 @@ function firebaseStore() {
       await firebase.update(gameRef, { phase: "results", timer: { ...emptyChallengeTimer(), status: "finished", remainingMs: 0 }, updatedAt: firebase.serverTimestamp() });
     },
     async saveGameChallengeRound(roundNumber, entries) {
-      const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`)), firebase.get(firebase.ref(firebase.db, "gameChallengesAdmin"))]);
-      let game = gameSnapshot.val(); const admin = applyChallengeRoundEntries(adminSnapshot.val(), roundNumber, entries);
-      if (game?.roundPublished?.[`round-${roundNumber}`]) game = { ...game, publicRounds: { ...(game.publicRounds || {}), [`round-${roundNumber}`]: buildChallengePublicRound(roundNumber, admin) } };
-      if (game?.estimateRevealed) game = { ...game, publicEstimate: buildPublicEstimate(admin) };
-      if (game?.status === "completed") game = calculateGameChallenges(game, admin);
-      await firebase.update(firebase.ref(firebase.db), { gameChallengesAdmin: admin, [`games/${GAME_CHALLENGES.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() });
+      const admin = applyChallengeRoundEntries((await firebase.get(firebase.ref(firebase.db, "gameChallengesAdmin"))).val(), roundNumber, entries);
+      await firebase.set(firebase.ref(firebase.db, "gameChallengesAdmin"), admin);
     },
     async publishGameChallengeRound(roundNumber) {
       const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`)), firebase.get(firebase.ref(firebase.db, "gameChallengesAdmin"))]);
@@ -392,6 +526,13 @@ function firebaseStore() {
       const publicRound = buildChallengePublicRound(roundNumber, adminSnapshot.val());
       const updates = { [`games/${GAME_CHALLENGES.id}/roundPublished/round-${roundNumber}`]: true, [`games/${GAME_CHALLENGES.id}/publicRounds/round-${roundNumber}`]: publicRound, [`games/${GAME_CHALLENGES.id}/updatedAt`]: firebase.serverTimestamp(), "settings/updatedAt": firebase.serverTimestamp() };
       if (Number(game.currentRound) === Number(roundNumber)) updates[`games/${GAME_CHALLENGES.id}/phase`] = "published";
+      const effectiveAdmin = publishedChallengesAdmin(game, adminSnapshot.val(), roundNumber);
+      if (game.estimateRevealed) updates[`games/${GAME_CHALLENGES.id}/publicEstimate`] = buildPublicEstimate(effectiveAdmin);
+      if (game.status === "completed") {
+        const corrected = calculateGameChallenges({ ...game, publicRounds: { ...game.publicRounds, [`round-${roundNumber}`]: publicRound } }, effectiveAdmin);
+        Object.keys(updates).filter(path => path.startsWith(`games/${GAME_CHALLENGES.id}/`)).forEach(path => delete updates[path]);
+        updates[`games/${GAME_CHALLENGES.id}`] = corrected;
+      }
       await firebase.update(firebase.ref(firebase.db), updates);
     },
     async nextGameChallengeRound() {
@@ -403,20 +544,21 @@ function firebaseStore() {
     async saveGameChallengeEstimateQuestion(questionId, question) {
       const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`)), firebase.get(firebase.ref(firebase.db, "gameChallengesAdmin"))]);
       let game = gameSnapshot.val(), admin = normaliseGameChallengesAdmin(adminSnapshot.val());
-      admin.estimateQuestions[questionId] = cleanEstimateQuestion(questionId, { ...admin.estimateQuestions[questionId], ...question, estimates: admin.estimateQuestions[questionId]?.estimates || {} }); admin.updatedAt = Date.now();
-      if (game?.estimateRevealed) game = { ...game, publicEstimate: buildPublicEstimate(admin) };
-      if (game?.status === "completed") game = calculateGameChallenges(game, admin);
-      await firebase.update(firebase.ref(firebase.db), { gameChallengesAdmin: admin, [`games/${GAME_CHALLENGES.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() });
+      admin.estimateQuestions[questionId] = cleanEstimateQuestion(questionId, { ...admin.estimateQuestions[questionId], ...question, estimates: admin.estimateQuestions[questionId]?.estimates || {} }); admin.updatedAt = serverNow();
+      await firebase.set(firebase.ref(firebase.db, "gameChallengesAdmin"), admin);
     },
     async revealGameChallengeEstimate() {
       const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`)), firebase.get(firebase.ref(firebase.db, "gameChallengesAdmin"))]);
       const game = gameSnapshot.val();
       for (let round = 1; round <= GAME_CHALLENGES.roundCount; round += 1) if (!game?.roundPublished?.[`round-${round}`]) throw new Error("Die Schätz-Challenge darf erst nach allen fünf Runden aufgelöst werden.");
-      await firebase.update(firebase.ref(firebase.db), { [`games/${GAME_CHALLENGES.id}/estimateRevealed`]: true, [`games/${GAME_CHALLENGES.id}/publicEstimate`]: buildPublicEstimate(adminSnapshot.val()), [`games/${GAME_CHALLENGES.id}/updatedAt`]: firebase.serverTimestamp() });
+      const publicEstimate = buildPublicEstimate(adminSnapshot.val());
+      const revealed = { ...game, estimateRevealed: true, publicEstimate };
+      const published = game.status === "completed" ? calculateGameChallenges(revealed, publishedChallengesAdmin(revealed, adminSnapshot.val())) : revealed;
+      await firebase.update(firebase.ref(firebase.db), { [`games/${GAME_CHALLENGES.id}`]: { ...published, updatedAt: firebase.serverTimestamp() }, "settings/updatedAt": firebase.serverTimestamp() });
     },
     async finishGameChallenges() {
       const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`)), firebase.get(firebase.ref(firebase.db, "gameChallengesAdmin"))]);
-      const game = calculateGameChallenges(gameSnapshot.val(), adminSnapshot.val());
+      const game = calculateGameChallenges(gameSnapshot.val(), publishedChallengesAdmin(gameSnapshot.val(), adminSnapshot.val()));
       await firebase.update(firebase.ref(firebase.db), { [`games/${GAME_CHALLENGES.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() });
     },
     async resetGameChallenges() {
@@ -427,7 +569,7 @@ function firebaseStore() {
       const cleanSupply = cleanBalloonSupply(supply);
       await firebase.update(firebase.ref(firebase.db), {
         [`games/${BALLOON_MONSTER.id}`]: buildBalloonMonster("running"),
-        balloonMonsterAdmin: { supply: cleanSupply, drafts: {}, updatedAt: Date.now() },
+        balloonMonsterAdmin: { supply: cleanSupply, drafts: {}, updatedAt: serverNow() },
         "settings/updatedAt": firebase.serverTimestamp()
       });
     },
@@ -455,7 +597,7 @@ function firebaseStore() {
       if (game?.status !== "running" || !game.currentTeamId || !["spinning", "selected", "timer"].includes(game.phase)) throw new Error("Bitte zuerst ein Reich auslosen.");
       const remainingMs = game.timer?.status === "paused" ? balloonTimerRemaining(game.timer) : BALLOON_MONSTER.timerSeconds * 1000;
       if (remainingMs <= 0) throw new Error("Die Zeit ist abgelaufen. Starte jetzt den Parcours oder setze den Timer zurück.");
-      const now = Date.now();
+      const now = serverNow();
       await firebase.update(gameRef, { phase: "timer", timer: { status: "running", durationMs: BALLOON_MONSTER.timerSeconds * 1000, remainingMs, startedAt: now, endsAt: now + remainingMs }, updatedAt: firebase.serverTimestamp() });
     },
     async pauseBalloonMonsterTimer() {
@@ -515,7 +657,7 @@ function firebaseStore() {
     async startBeerPongMatch(matchId) {
       const gameRef = firebase.ref(firebase.db, `games/${BEER_PONG.id}`), game = (await firebase.get(gameRef)).val(), match = game?.matches?.[matchId];
       validateBeerPongMatchStart(game, match);
-      const now = Date.now(), timed = match.stage !== "final";
+      const now = serverNow(), timed = match.stage !== "final";
       const updates = { [`games/${BEER_PONG.id}/matches/${matchId}/status`]: "running", [`games/${BEER_PONG.id}/matches/${matchId}/startedAt`]: now, [`games/${BEER_PONG.id}/matches/${matchId}/endsAt`]: timed ? now + 6 * 60000 : 0 };
       if (match.stage === "group") updates[`games/${BEER_PONG.id}/currentRound`] = Number(match.round);
       await firebase.update(firebase.ref(firebase.db), updates);
@@ -533,8 +675,14 @@ function firebaseStore() {
     },
     async publishBeerPongMatch(matchId) {
       const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${BEER_PONG.id}`)), firebase.get(firebase.ref(firebase.db, "beerPongAdmin"))]);
-      const admin = normaliseBeerPongAdmin(adminSnapshot.val()), game = publishBeerPongDraft(gameSnapshot.val(), admin, matchId);
-      await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: game, [`beerPongAdmin/drafts/${matchId}`]: null, "settings/updatedAt": firebase.serverTimestamp() });
+      const admin = normaliseBeerPongAdmin(adminSnapshot.val()), game = publishBeerPongDraft(beerPongAdminGame(gameSnapshot.val(), admin), admin, matchId);
+      const updates = { [`games/${BEER_PONG.id}`]: game, [`beerPongAdmin/drafts/${matchId}`]: null, "settings/updatedAt": firebase.serverTimestamp() };
+      if (matchId === "final" && !game.finalReveal) {
+        updates["beerPongAdmin/finalResult"] = game.matches.final;
+        updates["beerPongAdmin/finalGame"] = game.status === "completed" ? game : null;
+        updates[`games/${BEER_PONG.id}`] = concealBeerPongFinal(game);
+      }
+      await firebase.update(firebase.ref(firebase.db), updates);
     },
     async saveBeerPongTieBreakRanks(ranks) {
       const clean = cleanBeerPongTieBreakRanks(ranks);
@@ -547,21 +695,29 @@ function firebaseStore() {
     },
     async releaseBeerPongSemifinals() { const gameRef = firebase.ref(firebase.db, `games/${BEER_PONG.id}`), game = releaseBeerPongSemifinals((await firebase.get(gameRef)).val()); await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() }); },
     async releaseBeerPongFinal() { const gameRef = firebase.ref(firebase.db, `games/${BEER_PONG.id}`), game = releaseBeerPongFinal((await firebase.get(gameRef)).val()); await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() }); },
-    async finishBeerPong() { const gameRef = firebase.ref(firebase.db, `games/${BEER_PONG.id}`), game = completeBeerPong((await firebase.get(gameRef)).val()); await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() }); },
+    async finishBeerPong() {
+      const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${BEER_PONG.id}`)), firebase.get(firebase.ref(firebase.db, "beerPongAdmin"))]);
+      const game = completeBeerPong(beerPongAdminGame(gameSnapshot.val(), adminSnapshot.val()));
+      const updates = { [`games/${BEER_PONG.id}`]: game.finalReveal ? game : concealBeerPongFinal(game), "settings/updatedAt": firebase.serverTimestamp() };
+      if (!game.finalReveal) { updates["beerPongAdmin/finalGame"] = game; updates["beerPongAdmin/finalResult"] = game.matches.final; }
+      await firebase.update(firebase.ref(firebase.db), updates);
+    },
     async resetBeerPongFinal() {
       const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${BEER_PONG.id}`)), firebase.get(firebase.ref(firebase.db, "beerPongAdmin"))]);
-      const admin = normaliseBeerPongAdmin(adminSnapshot.val()); delete admin.drafts.final;
+      const admin = normaliseBeerPongAdmin(adminSnapshot.val()); delete admin.drafts.final; admin.finalGame = null; admin.finalResult = null;
       await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: resetBeerPongFinal(gameSnapshot.val()), beerPongAdmin: admin, "settings/mode": "live", "settings/updatedAt": firebase.serverTimestamp() });
     },
     async resetBeerPongKnockouts() {
       const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${BEER_PONG.id}`)), firebase.get(firebase.ref(firebase.db, "beerPongAdmin"))]);
-      const admin = normaliseBeerPongAdmin(adminSnapshot.val()); Object.keys(admin.drafts).filter(id => id.startsWith("semi-") || id === "final").forEach(id => delete admin.drafts[id]);
+      const admin = normaliseBeerPongAdmin(adminSnapshot.val()); Object.keys(admin.drafts).filter(id => id.startsWith("semi-") || id === "final").forEach(id => delete admin.drafts[id]); admin.finalGame = null; admin.finalResult = null;
       await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: resetBeerPongKnockouts(gameSnapshot.val()), beerPongAdmin: admin, "settings/mode": "live", "settings/updatedAt": firebase.serverTimestamp() });
     },
     async revealRegnumWinner() {
-      const gameRef = firebase.ref(firebase.db, `games/${BEER_PONG.id}`), game = (await firebase.get(gameRef)).val();
+      const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${BEER_PONG.id}`)), firebase.get(firebase.ref(firebase.db, "beerPongAdmin"))]);
+      const game = beerPongAdminGame(gameSnapshot.val(), adminSnapshot.val());
       if (game?.status !== "completed") throw new Error("Das Beer-Pong-Turnier ist noch nicht abgeschlossen.");
-      await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}/finalReveal`]: true, "settings/mode": "final", "settings/updatedAt": firebase.serverTimestamp() });
+      const finalGame = completeBeerPong(game);
+      await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: { ...finalGame, finalReveal: true, updatedAt: firebase.serverTimestamp() }, "beerPongAdmin/finalGame": null, "beerPongAdmin/finalResult": null, "settings/mode": "final", "settings/updatedAt": firebase.serverTimestamp() });
     },
     async resetBeerPong() {
       const current = (await firebase.get(firebase.ref(firebase.db, `games/${BEER_PONG.id}`))).val();
@@ -579,7 +735,7 @@ function firebaseStore() {
       const admin = (await firebase.get(firebase.ref(firebase.db, "huntAdmin/targets"))).val();
       const targets = huntTargetList(admin).map(publicHuntTarget);
       if (!targets.length) throw new Error("Mindestens ein Gegenstand muss aktiv sein.");
-      const startedAt = Date.now(), roundId = startedAt.toString(36);
+      const startedAt = serverNow(), roundId = startedAt.toString(36);
       await firebase.update(firebase.ref(firebase.db), {
         "huntAdmin/targets": normaliseHuntTargets(admin),
         "settings/hunt": { active: true, roundId, startedAt, stoppedAt: 0, targetCount: targets.length, targets: Object.fromEntries(targets.map(target => [target.id, target])) },
@@ -595,15 +751,15 @@ function firebaseStore() {
       return firebase.update(firebase.ref(firebase.db), updates);
     },
     async claimHuntObject(roundId, target, profile) {
-      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      profile = await ensurePlayer(profile);
       const gameId = `hunt-${roundId}-${profile.teamId}-${target.id}`;
       const gameRef = firebase.ref(firebase.db, `games/${gameId}`);
       let created = false;
       const result = await firebase.runTransaction(gameRef, current => {
         if (current) return;
         created = true;
-        return huntGame(roundId, target, profile, firebase.auth.currentUser.uid);
-      });
+        return { ...huntGame(roundId, target, profile, firebase.auth.currentUser.uid), createdAt: firebase.serverTimestamp(), updatedAt: firebase.serverTimestamp() };
+      }, { applyLocally: false });
       return { awarded: created && result.committed, find: result.snapshot.val() };
     },
     async addHuntFind(roundId, targetId, teamId, playerName) {
@@ -622,7 +778,7 @@ function firebaseStore() {
       await firebase.update(firebase.ref(firebase.db), { [`games/hunt-${roundId}-${teamId}-${targetId}`]: null, "settings/updatedAt": firebase.serverTimestamp() });
     },
     startOracle({ question, answer, unit, minutes, maxPoints = 5 }) {
-      const startedAt = Date.now();
+      const startedAt = serverNow();
       const roundId = startedAt.toString(36);
       const updates = {};
       updates["settings/oracle"] = { active: true, revealed: false, roundId, question, unit, maxPoints, startedAt, endsAt: startedAt + minutes * 60000, results: {} };
@@ -630,21 +786,22 @@ function firebaseStore() {
       return firebase.update(firebase.ref(firebase.db), updates);
     },
     async submitOracleAnswer(roundId, profile, value) {
-      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
+      profile = await ensurePlayer(profile);
       const answerRef = firebase.ref(firebase.db, `oracleAnswers/${roundId}/${profile.teamId}`);
       let created = false;
       const result = await firebase.runTransaction(answerRef, current => {
         if (current) return;
         created = true;
-        return { value, playerName: profile.name, claimantId: firebase.auth.currentUser.uid, createdAt: Date.now() };
-      });
+        return { value, playerName: profile.name, claimantId: firebase.auth.currentUser.uid, createdAt: firebase.serverTimestamp() };
+      }, { applyLocally: false });
       return { accepted: created && result.committed, answer: result.snapshot.val()?.value };
     },
     async finishOracle(state) {
       const oracle = state.settings.oracle;
       const secret = (await firebase.get(firebase.ref(firebase.db, `oracleSecrets/${oracle.roundId}`))).val();
       if (!secret || !Number.isFinite(Number(secret.answer))) throw new Error("oracle-secret-missing");
-      const result = buildOracleResult(state, Number(secret.answer));
+      const answers = (await firebase.get(firebase.ref(firebase.db, `oracleAnswers/${oracle.roundId}`))).val() || {};
+      const result = buildOracleResult({ ...state, oracleAnswers: { [oracle.roundId]: answers } }, Number(secret.answer));
       const updates = {};
       updates[`games/oracle-${result.roundId}`] = result.game;
       updates["settings/oracle/active"] = false;
@@ -657,6 +814,38 @@ function firebaseStore() {
     },
     hideOracle() { return firebase.update(firebase.ref(firebase.db, "settings/oracle"), { active: false, revealed: false }); }
   };
+}
+
+export function beerPongAdminGame(game, admin = {}) {
+  if (!game || game.finalReveal) return game;
+  if (admin.finalGame) return admin.finalGame;
+  return admin.finalResult ? { ...game, matches: { ...game.matches, final: admin.finalResult } } : game;
+}
+
+function concealBeerPongFinal(game) {
+  const hidden = structuredClone(game);
+  const final = hidden.matches?.final;
+  if (final) {
+    ["cupsHitA", "cupsHitB", "winnerId", "decidedBy", "publishedAt", "savedAt"].forEach(field => delete final[field]);
+    final.published = false;
+    final.resultPending = true;
+  }
+  hidden.points = emptyTeamCounts(); hidden.ranking = []; hidden.placements = {};
+  hidden.winnerIds = []; hidden.resultText = ""; hidden.finalReveal = false;
+  return hidden;
+}
+
+function publishedChallengesAdmin(game, drafts, roundOverride = null) {
+  const admin = normaliseGameChallengesAdmin(drafts);
+  const effective = { ...admin, results: {}, estimateQuestions: game.publicEstimate?.questions ? structuredClone(game.publicEstimate.questions) : structuredClone(admin.estimateQuestions) };
+  Object.values(effective.estimateQuestions).forEach(question => { question.enabled = true; });
+  const rounds = { ...(game.publicRounds || {}) };
+  if (roundOverride !== null) rounds[`round-${roundOverride}`] = buildChallengePublicRound(roundOverride, admin);
+  Object.values(rounds).forEach(round => Object.entries(round.teams || {}).forEach(([teamId, result]) => {
+    if (result.stationId !== "estimate") ((effective.results[result.stationId] ||= {})[teamId]) = result.value;
+    else if (Number(round.round) === Number(roundOverride)) Object.entries(effective.estimateQuestions).forEach(([id, question]) => { question.estimates[teamId] = admin.estimateQuestions[id]?.estimates?.[teamId]; });
+  }));
+  return effective;
 }
 
 function localStore() {
@@ -790,8 +979,8 @@ function huntGame(roundId, target, profile, claimantId, manual = false) {
     teamId: profile.teamId,
     manual: !!manual,
     awardedPoints: HUNT_POINTS_PER_OBJECT,
-    createdAt: Date.now(),
-    updatedAt: Date.now()
+    createdAt: serverNow(),
+    updatedAt: serverNow()
   };
 }
 
@@ -824,7 +1013,7 @@ function resetGameChallengesAdmin(value = null) {
   const admin = normaliseGameChallengesAdmin(value);
   admin.results = {};
   Object.values(admin.estimateQuestions).forEach(question => { question.estimates = {}; });
-  admin.updatedAt = Date.now();
+  admin.updatedAt = serverNow();
   return admin;
 }
 
@@ -840,7 +1029,7 @@ function applyChallengeRoundEntries(value, roundNumber, entries = {}) {
       ((admin.results[stationId] ||= {}))[team.id] = cleanChallengeResult(stationId, entry.value);
     }
   });
-  admin.updatedAt = Date.now();
+  admin.updatedAt = serverNow();
   return admin;
 }
 
@@ -875,7 +1064,7 @@ function publishBeerPongDraft(gameValue, adminValue, matchId) {
   const match = game.matches?.[matchId] || original;
   game.matches[matchId] = publicBeerPongMatch(match, draft);
   if (match.stage === "final" && game.status === "completed") game = completeBeerPong(game);
-  game.updatedAt = Date.now();
+  game.updatedAt = serverNow();
   return game;
 }
 
@@ -925,6 +1114,7 @@ function publicNovitiusQuestion(question) {
 }
 
 function cleanNovitiusAnswerValue(question, value) {
+  if (value === null || value === undefined || typeof value === "boolean" || String(value).trim() === "") throw new Error("Bitte eine gültige Antwort eingeben.");
   if (question?.type === "time") {
     const clean = String(value || "");
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(clean)) throw new Error("Bitte eine gültige Uhrzeit im Format HH:MM eingeben.");
@@ -937,7 +1127,7 @@ function cleanNovitiusAnswerValue(question, value) {
 
 function storedNovitiusScore(question, value) {
   const result = scoreNovitiusAnswer(question, value);
-  return { points: result.points, deviation: Number.isFinite(result.deviation) ? result.deviation : null, scoredAt: Date.now() };
+  return { points: result.points, deviation: Number.isFinite(result.deviation) ? result.deviation : null, scoredAt: serverNow() };
 }
 
 function applyStoredNovitiusScores(questions = {}, answers = {}, revealedQuestions = {}) {
@@ -989,7 +1179,7 @@ function refinalizeNovitiusOrPending(game, questions, participants, answers) {
   try { return finalizeNovitiusGame(game, questions, participants, answers); }
   catch (error) {
     if (!String(error.message).startsWith("Gleichstand – Stechfrage erforderlich")) throw error;
-    return { ...game, status: "running", points: emptyTeamCounts(), ranking: [], placements: {}, winnerIds: [], resultText: "", tieBreak: null, updatedAt: Date.now() };
+    return { ...game, status: "running", points: emptyTeamCounts(), ranking: [], placements: {}, winnerIds: [], resultText: "", tieBreak: null, updatedAt: serverNow() };
   }
 }
 
@@ -1008,7 +1198,7 @@ function buildSongPublicReveal(answers, evaluations, songNumber, validate = fals
       artistCorrect: answer ? evaluation.artist === true : false
     };
   });
-  return { songNumber: Number(songNumber), teams, revealedAt: Date.now() };
+  return { songNumber: Number(songNumber), teams, revealedAt: serverNow() };
 }
 
 function getLocalProfileId() {
@@ -1034,6 +1224,6 @@ function buildOracleResult(state, answerOverride = null) {
   return {
     roundId: oracle.roundId,
     results,
-    game: { name: "Das Orakel", round: oracle.question, resultText: `Lösung: ${correctAnswer}${oracle.unit ? ` ${oracle.unit}` : ""}`, points, source: "oracle", createdAt: Date.now(), updatedAt: Date.now() }
+    game: { name: "Das Orakel", round: oracle.question, resultText: `Lösung: ${correctAnswer}${oracle.unit ? ` ${oracle.unit}` : ""}`, points, source: "oracle", createdAt: serverNow(), updatedAt: serverNow() }
   };
 }

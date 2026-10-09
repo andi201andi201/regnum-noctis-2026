@@ -1,4 +1,5 @@
-import { TEAMS } from "./data.js?v=ballon-monster-1";
+import { TEAMS } from "./data.js?v=firebase-live-20261009-1";
+import { serverNow } from "./time.js?v=firebase-live-20261009-1";
 
 export const GAME_CHALLENGES = {
   id: "game-challenges",
@@ -18,9 +19,9 @@ export const CHALLENGE_STATIONS = [
 ];
 
 export const GAME_CHALLENGE_DEFAULT_ESTIMATES = {
-  "estimate-1": estimateQuestion(1, "Wie viele Pilze befinden sich im Glas?", "Stück"),
-  "estimate-2": estimateQuestion(2, "Wie viele Maiskörner befinden sich im Behälter?", "Stück"),
-  "estimate-3": estimateQuestion(3, "Wie schwer ist der Gegenstand?", "g")
+  "estimate-1": estimateQuestion(1, "", "Stück"),
+  "estimate-2": estimateQuestion(2, "", "Stück"),
+  "estimate-3": estimateQuestion(3, "", "g")
 };
 
 export const GAME_CHALLENGE_ROTATIONS = Object.fromEntries(Array.from({ length: GAME_CHALLENGES.roundCount }, (_, roundIndex) => {
@@ -29,7 +30,7 @@ export const GAME_CHALLENGE_ROTATIONS = Object.fromEntries(Array.from({ length: 
 }));
 
 export function buildGameChallenges(status = "running", existing = null) {
-  const now = Date.now(), running = status === "running", completed = status === "completed";
+  const now = serverNow(), running = status === "running", completed = status === "completed";
   if (!["not-started", "running", "completed"].includes(status)) throw new Error("Ungültiger Game-Challenges-Status.");
   return {
     name: GAME_CHALLENGES.name,
@@ -105,16 +106,16 @@ export function buildChallengePublicRound(roundNumber, adminValue) {
   TEAMS.forEach(team => {
     const stationId = assignments[team.id], station = stationById(stationId);
     if (stationId === "estimate") {
-      const missing = activeQuestions.filter(question => !Number.isFinite(Number(question.estimates?.[team.id])));
+      const missing = activeQuestions.filter(question => !hasNumericValue(question.estimates?.[team.id]));
       if (missing.length) throw new Error(`${team.name}: Bitte alle Schätzungen erfassen.`);
       teams[team.id] = { stationId, stationName: station.name, icon: station.icon, submitted: true };
     } else {
       const raw = admin.results?.[stationId]?.[team.id];
-      if (!Number.isFinite(Number(raw))) throw new Error(`${team.name}: Resultat für ${station.name} fehlt.`);
+      if (!hasNumericValue(raw)) throw new Error(`${team.name}: Resultat für ${station.name} fehlt.`);
       teams[team.id] = { stationId, stationName: station.name, icon: station.icon, value: cleanChallengeResult(stationId, raw), unit: station.unit };
     }
   });
-  return { round, teams, publishedAt: Date.now() };
+  return { round, teams, publishedAt: serverNow() };
 }
 
 export function buildPublicEstimate(adminValue) {
@@ -122,11 +123,12 @@ export function buildPublicEstimate(adminValue) {
   if (!questions.length) throw new Error("Mindestens eine Schätzfrage muss aktiv sein.");
   return {
     questions: Object.fromEntries(questions.map(question => {
-      if (!Number.isFinite(Number(question.correctValue))) throw new Error(`Richtiges Ergebnis fehlt: ${question.text}`);
+      if (!hasNumericValue(question.correctValue)) throw new Error(`Richtiges Ergebnis fehlt: ${question.text}`);
       const correctValue = Number(question.correctValue), estimates = {}, deviations = {}, subPoints = {};
       TEAMS.forEach(team => {
-        const estimate = Number(question.estimates?.[team.id]);
-        if (!Number.isFinite(estimate)) throw new Error(`${team.name}: Schätzung fehlt bei „${question.text}“.`);
+        const rawEstimate = question.estimates?.[team.id];
+        if (!hasNumericValue(rawEstimate)) throw new Error(`${team.name}: Schätzung fehlt bei „${question.text}“.`);
+        const estimate = Number(rawEstimate);
         estimates[team.id] = estimate;
         deviations[team.id] = fairEstimateDeviation(estimate, correctValue);
       });
@@ -134,7 +136,7 @@ export function buildPublicEstimate(adminValue) {
       TEAMS.forEach(team => { subPoints[team.id] = scored.points[team.id]; });
       return [question.id, { id: question.id, number: question.number, text: question.text, unit: question.unit, correctValue, estimates, deviations, subPoints }];
     })),
-    revealedAt: Date.now()
+    revealedAt: serverNow()
   };
 }
 
@@ -150,7 +152,7 @@ export function calculateGameChallenges(game, adminValue) {
     } else {
       values = Object.fromEntries(TEAMS.map(team => {
         const value = admin.results?.[station.id]?.[team.id];
-        if (!Number.isFinite(Number(value))) throw new Error(`${station.name}: Resultat für ${team.name} fehlt.`);
+        if (!hasNumericValue(value)) throw new Error(`${station.name}: Resultat für ${team.name} fehlt.`);
         return [team.id, cleanChallengeResult(station.id, value)];
       }));
     }
@@ -170,7 +172,7 @@ export function calculateGameChallenges(game, adminValue) {
     placements[teamId] = tied ? placements[previous] : index + 1;
     points[teamId] = 6 - placements[teamId];
   });
-  const now = Date.now();
+  const now = serverNow();
   return {
     ...game,
     status: "completed",
@@ -201,7 +203,7 @@ export function stationForTeam(round, teamId) {
 
 export function stationById(id) { return CHALLENGE_STATIONS.find(station => station.id === id) || null; }
 
-export function challengeTimerRemaining(timer, now = Date.now()) {
+export function challengeTimerRemaining(timer, now = serverNow()) {
   if (timer?.status === "running") return Math.max(0, Number(timer.endsAt || 0) - now);
   return Math.max(0, Number(timer?.remainingMs ?? GAME_CHALLENGES.durationSeconds * 1000));
 }
@@ -227,4 +229,5 @@ function fairEstimateDeviation(estimate, correctValue) {
 
 function estimateQuestion(number, text, unit) { return { id: `estimate-${number}`, number, text, unit, correctValue: "", enabled: true, estimates: {} }; }
 function emptyTeamValues() { return Object.fromEntries(TEAMS.map(team => [team.id, 0])); }
-function finiteNonNegative(value, label) { const number = Number(value); if (!Number.isFinite(number) || number < 0) throw new Error(`${label} muss eine gültige Zahl ab 0 sein.`); return number; }
+function hasNumericValue(value) { return (typeof value === "number" || typeof value === "string" && value.trim() !== "") && Number.isFinite(Number(value)); }
+function finiteNonNegative(value, label) { const number = Number(value); if (!hasNumericValue(value) || number < 0) throw new Error(`${label} muss eine gültige Zahl ab 0 sein.`); return number; }

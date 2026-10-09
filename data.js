@@ -1,3 +1,5 @@
+import { serverNow } from "./time.js?v=firebase-live-20261009-1";
+
 export const TEAMS = [
   { id: "draco", name: "Draco", marker: "🔴", title: "Reich des Drachen", logo: "assets/teams/draco.webp", color: "#d84747", glow: "#ff6b57" },
   { id: "serpens", name: "Serpens", marker: "🟢", title: "Reich der Schlange", logo: "assets/teams/serpens.webp", color: "#2f9e68", glow: "#61d095" },
@@ -48,15 +50,15 @@ export const NOVITIUS_GAME = {
 };
 
 export const NOVITIUS_DEFAULT_QUESTIONS = {
-  "question-1": novitiusQuestion(1, "Wie viele Minuten braucht Simon morgens vom Wecker bis zur Haustür?", "number", "Minuten", 25, [2, 5, 10]),
-  "question-2": novitiusQuestion(2, "Wie viele Bier würde Simon an einem langen Abend realistisch trinken?", "number", "Bier", 12, [1, 3, 6]),
-  "question-3": novitiusQuestion(3, "Wie viele Fotos sind ungefähr auf Simons Handy?", "number", "Fotos", 17643, [0.1, 0.25, 0.5], "percentage"),
-  "question-4": novitiusQuestion(4, "Wie viele Paar Schuhe besitzt Simon?", "number", "Paar", 7, [0, 1, 2]),
-  "question-5": novitiusQuestion(5, "Wie viele Länder hat Simon schon besucht?", "number", "Länder", 17, [1, 3, 5]),
-  "question-6": novitiusQuestion(6, "Wie viele Minuten braucht Simon durchschnittlich zum Duschen?", "number", "Minuten", 10, [1, 3, 5]),
-  "question-7": novitiusQuestion(7, "Wie viele Wecker stellt Simon morgens?", "number", "Wecker", 3, [0, 1, 2]),
-  "question-8": novitiusQuestion(8, "Wie spät war Simon spätestens noch im Ausgang?", "time", "Uhr", "08:00", [30, 90, 180], "time"),
-  "question-9": novitiusQuestion(9, "Wie viele Raclette-Pfännchen schafft Simon?", "number", "Pfännchen", 5, [0, 1, 2]),
+  "question-1": novitiusQuestion(1, "Wie viele Minuten braucht Simon morgens vom Wecker bis zur Haustür?", "number", "Minuten", "", [2, 5, 10]),
+  "question-2": novitiusQuestion(2, "Wie viele Bier würde Simon an einem langen Abend realistisch trinken?", "number", "Bier", "", [1, 3, 6]),
+  "question-3": novitiusQuestion(3, "Wie viele Fotos sind ungefähr auf Simons Handy?", "number", "Fotos", "", [0.1, 0.25, 0.5], "percentage"),
+  "question-4": novitiusQuestion(4, "Wie viele Paar Schuhe besitzt Simon?", "number", "Paar", "", [0, 1, 2]),
+  "question-5": novitiusQuestion(5, "Wie viele Länder hat Simon schon besucht?", "number", "Länder", "", [1, 3, 5]),
+  "question-6": novitiusQuestion(6, "Wie viele Minuten braucht Simon durchschnittlich zum Duschen?", "number", "Minuten", "", [1, 3, 5]),
+  "question-7": novitiusQuestion(7, "Wie viele Wecker stellt Simon morgens?", "number", "Wecker", "", [0, 1, 2]),
+  "question-8": novitiusQuestion(8, "Wie spät war Simon spätestens noch im Ausgang?", "time", "Uhr", "", [30, 90, 180], "time"),
+  "question-9": novitiusQuestion(9, "Wie viele Raclette-Pfännchen schafft Simon?", "number", "Pfännchen", "", [0, 1, 2]),
   "question-10": { ...novitiusQuestion(10, "Wie viele Gummibärchen passen gleichzeitig in Simons Mund?", "number", "Gummibärchen", "", [0, 1, 2]), liveAnswer: true }
 };
 
@@ -68,7 +70,7 @@ export const GAME_STATUSES = {
 
 export function buildSongBattle(status = "running", existing = null) {
   if (!Object.hasOwn(GAME_STATUSES, status)) throw new Error("Bitte einen gültigen Spielstatus wählen.");
-  const now = Date.now();
+  const now = serverNow();
   const { id, songCount, ...definition } = SONG_BATTLE;
   return {
     ...definition,
@@ -91,7 +93,7 @@ export function buildSongBattle(status = "running", existing = null) {
 
 export function songBattleScores(evaluations = {}) {
   const scores = emptyTeamPoints();
-  Object.values(evaluations || {}).forEach(song => TEAMS.forEach(team => {
+  Array.from({ length: SONG_BATTLE.songCount }, (_, index) => evaluations?.[`song-${index + 1}`]).forEach(song => TEAMS.forEach(team => {
     if (song?.[team.id]?.title === true) scores[team.id] += 1;
     if (song?.[team.id]?.artist === true) scores[team.id] += 1;
   }));
@@ -124,7 +126,7 @@ export function finalizeSongBattle(game, evaluations) {
     points[id] = TEAMS.length + 1 - place;
   });
   const winnerIds = ranking.filter(id => placements[id] === 1);
-  const now = Date.now();
+  const now = serverNow();
   return {
     ...game,
     status: "completed",
@@ -143,7 +145,7 @@ export function finalizeSongBattle(game, evaluations) {
 
 export function buildNovitiusGame(status = "running", existing = null) {
   if (!Object.hasOwn(GAME_STATUSES, status)) throw new Error("Bitte einen gültigen Spielstatus wählen.");
-  const now = Date.now();
+  const now = serverNow();
   const { id, questionCount, ...definition } = NOVITIUS_GAME;
   return {
     ...definition,
@@ -218,13 +220,14 @@ export function buildNovitiusReveal(question, participants = {}, answers = {}, t
     teamRoundScores,
     teamTotals,
     ranking,
-    revealedAt: Date.now()
+    revealedAt: serverNow()
   };
 }
 
 export function rebuildNovitiusReveals(questions = {}, participants = {}, answers = {}, teamSizes = {}, revealedQuestions = {}) {
   const reveals = {};
   let cumulative = emptyTeamPoints();
+  const participantTotals = Object.fromEntries(Object.keys(participants).map(id => [id, 0]));
   for (let number = 1; number <= NOVITIUS_GAME.questionCount; number += 1) {
     const key = `question-${number}`;
     if (!revealedQuestions?.[key]) continue;
@@ -232,6 +235,16 @@ export function rebuildNovitiusReveals(questions = {}, participants = {}, answer
     if (!question) continue;
     const questionAnswers = Object.fromEntries(Object.entries(answers || {}).map(([id, values]) => [id, values?.[key]]).filter(([, answer]) => answer));
     const reveal = buildNovitiusReveal(question, participants, questionAnswers, teamSizes, cumulative);
+    Object.keys(participants).forEach(id => {
+      const answer = questionAnswers[id];
+      if (answer) participantTotals[id] += scoreNovitiusAnswer(question, answer.value).points;
+    });
+    // Publish only released scores and display names, never participant UIDs or answers.
+    reveal.top10 = Object.entries(participantTotals)
+      .filter(([id]) => TEAMS.some(team => team.id === participants[id].teamId))
+      .map(([id, points]) => ({ playerName: participants[id].playerName, teamId: participants[id].teamId, points }))
+      .sort((a, b) => b.points - a.points || a.playerName.localeCompare(b.playerName) || a.teamId.localeCompare(b.teamId))
+      .slice(0, 10);
     reveals[key] = reveal;
     cumulative = reveal.teamTotals;
   }
@@ -275,7 +288,7 @@ export function finalizeNovitiusGame(game, questions, participants = {}, answers
     placements[teamId] = index + 1;
     points[teamId] = TEAMS.length - index;
   });
-  const now = Date.now();
+  const now = serverNow();
   return {
     ...game,
     status: "completed",

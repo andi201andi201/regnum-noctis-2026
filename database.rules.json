@@ -1,103 +1,316 @@
 {
   "rules": {
+    ".read": false,
+    ".write": false,
     "settings": {
       ".read": true,
-      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now"
     },
     "games": {
       ".read": true,
       "$gameId": {
-        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || (!data.exists() && newData.child('source').val() === 'team-hunt' && root.child('settings/hunt/active').val() === true && root.child('settings/hunt/roundId').val() === newData.child('roundId').val() && root.child('settings/hunt/targets').child(newData.child('targetId').val()).exists() && $gameId === 'hunt-' + newData.child('roundId').val() + '-' + newData.child('teamId').val() + '-' + newData.child('targetId').val() && newData.child('claimantId').val() === auth.uid && newData.child('playerName').isString() && newData.child('playerName').val().length > 0 && newData.child('playerName').val().length <= 32 && (newData.child('teamId').val() === 'draco' || newData.child('teamId').val() === 'serpens' || newData.child('teamId').val() === 'lupus' || newData.child('teamId').val() === 'corvus' || newData.child('teamId').val() === 'noctua') && newData.child('targetNumber').val() === root.child('settings/hunt/targets').child(newData.child('targetId').val()).child('number').val() && newData.child('awardedPoints').val() === 1 && newData.child('points/draco').val() === (newData.child('teamId').val() === 'draco' ? 1 : 0) && newData.child('points/serpens').val() === (newData.child('teamId').val() === 'serpens' ? 1 : 0) && newData.child('points/lupus').val() === (newData.child('teamId').val() === 'lupus' ? 1 : 0) && newData.child('points/corvus').val() === (newData.child('teamId').val() === 'corvus' ? 1 : 0) && newData.child('points/noctua').val() === (newData.child('teamId').val() === 'noctua' ? 1 : 0)))"
+        ".write": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now && (!newData.exists() || newData.child('adminOperationId').val() === root.child('adminOperationLock/operationId').val())) || (auth != null && auth.token.firebase.sign_in_provider === 'anonymous' && !data.exists() && root.child('settings/mode').val() === 'live' && root.child('settings/hunt/active').val() === true && root.child('settings/hunt/roundId').val() === newData.child('roundId').val() && root.child('settings/hunt/targetCount').isNumber() && root.child('settings/hunt/targetCount').val() > 0 && root.child('settings/hunt/targetCount').val() <= 10 && root.child('settings/hunt/targets').child(newData.child('targetId').val()).exists() && $gameId === 'hunt-' + newData.child('roundId').val() + '-' + newData.child('teamId').val() + '-' + newData.child('targetId').val() && newData.child('source').val() === 'team-hunt' && newData.child('claimantId').val() === auth.uid && newData.child('playerName').val() === root.child('players').child(auth.uid).child('playerName').val() && newData.child('teamId').val() === root.child('players').child(auth.uid).child('teamId').val() && (newData.child('teamId').val() === 'draco' || newData.child('teamId').val() === 'serpens' || newData.child('teamId').val() === 'lupus' || newData.child('teamId').val() === 'corvus' || newData.child('teamId').val() === 'noctua') && newData.child('targetNumber').val() === root.child('settings/hunt/targets').child(newData.child('targetId').val()).child('number').val() && newData.child('targetId').val() === 'object-' + newData.child('targetNumber').val() && newData.child('manual').val() === false && newData.child('awardedPoints').val() === 1 && newData.child('points/draco').val() === (newData.child('teamId').val() === 'draco' ? 1 : 0) && newData.child('points/serpens').val() === (newData.child('teamId').val() === 'serpens' ? 1 : 0) && newData.child('points/lupus').val() === (newData.child('teamId').val() === 'lupus' ? 1 : 0) && newData.child('points/corvus').val() === (newData.child('teamId').val() === 'corvus' ? 1 : 0) && newData.child('points/noctua').val() === (newData.child('teamId').val() === 'noctua' ? 1 : 0))",
+        ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || newData.hasChildren([\"name\",\"round\",\"resultText\",\"points\",\"source\",\"roundId\",\"targetId\",\"targetNumber\",\"claimantId\",\"playerName\",\"teamId\",\"manual\",\"awardedPoints\",\"createdAt\",\"updatedAt\"])",
+        "name": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.val() === 'Nachtjagd · Gegenstand ' + newData.parent().child('targetNumber').val())"
+        },
+        "round": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.val() === 'Die zehn Zeichen')"
+        },
+        "resultText": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.val() === 'Gegenstand ' + newData.parent().child('targetNumber').val() + ' gefunden von ' + newData.parent().child('playerName').val())"
+        },
+        "source": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.val() === 'team-hunt')"
+        },
+        "roundId": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val().length <= 64)"
+        },
+        "targetId": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val() === 'object-' + newData.parent().child('targetNumber').val())"
+        },
+        "targetNumber": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isNumber() && newData.val() >= 1 && newData.val() <= 10 && newData.val() % 1 === 0)"
+        },
+        "claimantId": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val() === auth.uid)"
+        },
+        "playerName": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val().length > 0 && newData.val().length <= 32)"
+        },
+        "teamId": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || ((newData.val() === 'draco' || newData.val() === 'serpens' || newData.val() === 'lupus' || newData.val() === 'corvus' || newData.val() === 'noctua'))"
+        },
+        "manual": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isBoolean() && newData.val() === false)"
+        },
+        "awardedPoints": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isNumber() && newData.val() === 1)"
+        },
+        "createdAt": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isNumber() && newData.val() === now)"
+        },
+        "updatedAt": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isNumber() && newData.val() === now)"
+        },
+        "$other": {
+          ".validate": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true"
+        },
+        "points": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || newData.hasChildren([\"draco\",\"serpens\",\"lupus\",\"corvus\",\"noctua\"])",
+          "$teamId": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (($teamId === 'draco' || $teamId === 'serpens' || $teamId === 'lupus' || $teamId === 'corvus' || $teamId === 'noctua') && newData.isNumber() && newData.val() === (newData.parent().parent().child('teamId').val() === $teamId ? 1 : 0))"
+          }
+        }
+      }
+    },
+    "players": {
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now) && !newData.exists()",
+      "$uid": {
+        ".read": "auth != null && $uid === auth.uid",
+        ".write": "((auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now) && !newData.exists()) || (auth != null && auth.token.firebase.sign_in_provider === 'anonymous' && $uid === auth.uid && !data.exists() && newData.exists() && (newData.child('teamId').val() === 'draco' || newData.child('teamId').val() === 'serpens' || newData.child('teamId').val() === 'lupus' || newData.child('teamId').val() === 'corvus' || newData.child('teamId').val() === 'noctua') && newData.child('playerName').isString() && newData.child('playerName').val().length > 0 && newData.child('playerName').val().length <= 32)",
+        ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || newData.hasChildren([\"teamId\",\"playerName\",\"joinedAt\"])",
+        "teamId": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || ((newData.val() === 'draco' || newData.val() === 'serpens' || newData.val() === 'lupus' || newData.val() === 'corvus' || newData.val() === 'noctua'))"
+        },
+        "playerName": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val().length > 0 && newData.val().length <= 32)"
+        },
+        "joinedAt": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isNumber() && newData.val() === now)"
+        },
+        "$other": {
+          ".validate": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true"
+        }
       }
     },
     "oracleAnswers": {
-      ".read": true,
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now",
       "$roundId": {
         "$teamId": {
-          ".write": "auth != null && !data.exists() && root.child('settings/oracle/active').val() === true && root.child('settings/oracle/roundId').val() === $roundId && now < root.child('settings/oracle/endsAt').val() && ($teamId === 'draco' || $teamId === 'serpens' || $teamId === 'lupus' || $teamId === 'corvus' || $teamId === 'noctua') && newData.child('value').isNumber() && newData.child('playerName').isString() && newData.child('playerName').val().length > 0 && newData.child('playerName').val().length <= 32 && newData.child('claimantId').val() === auth.uid"
+          ".read": "auth != null && $teamId === root.child('players').child(auth.uid).child('teamId').val()",
+          ".write": "(auth != null && auth.token.firebase.sign_in_provider === 'anonymous') && !data.exists() && root.child('settings/mode').val() === 'live' && root.child('settings/oracle/active').val() === true && root.child('settings/oracle/revealed').val() !== true && root.child('settings/oracle/roundId').val() === $roundId && now < root.child('settings/oracle/endsAt').val() && ($teamId === 'draco' || $teamId === 'serpens' || $teamId === 'lupus' || $teamId === 'corvus' || $teamId === 'noctua') && $teamId === root.child('players').child(auth.uid).child('teamId').val() && newData.child('playerName').val() === root.child('players').child(auth.uid).child('playerName').val() && newData.child('claimantId').val() === auth.uid",
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || newData.hasChildren([\"value\",\"playerName\",\"claimantId\",\"createdAt\"])",
+          "value": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000000000)"
+          },
+          "playerName": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val().length > 0 && newData.val().length <= 32)"
+          },
+          "claimantId": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val() === auth.uid)"
+          },
+          "createdAt": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isNumber() && newData.val() === now)"
+          },
+          "$other": {
+            ".validate": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true"
+          }
         }
       }
     },
     "songBattleAnswers": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
-      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now",
       "$teamId": {
-        ".read": "auth != null",
+        ".read": "auth != null && $teamId === root.child('players').child(auth.uid).child('teamId').val() && root.child('songBattleParticipants').child($teamId).child('claimantId').val() === auth.uid",
         "$songId": {
-          ".write": "auth != null && root.child('settings').child('mode').val() === 'live' && root.child('games/song-battle/status').val() === 'running' && root.child('games/song-battle/answersOpen').val() === true && newData.child('songNumber').val() === root.child('games/song-battle/currentSong').val() && root.child('songBattleParticipants').child($teamId).child('claimantId').val() === auth.uid && ($teamId === 'draco' || $teamId === 'serpens' || $teamId === 'lupus' || $teamId === 'corvus' || $teamId === 'noctua') && $songId === 'song-' + newData.child('songNumber').val() && newData.child('title').isString() && newData.child('title').val().length <= 120 && newData.child('artist').isString() && newData.child('artist').val().length <= 120 && (newData.child('title').val().length > 0 || newData.child('artist').val().length > 0) && newData.child('playerName').isString() && newData.child('playerName').val().length > 0 && newData.child('playerName').val().length <= 32 && newData.child('claimantId').val() === auth.uid"
+          ".write": "(auth != null && auth.token.firebase.sign_in_provider === 'anonymous') && root.child('settings/mode').val() === 'live' && root.child('games/song-battle/status').val() === 'running' && root.child('games/song-battle/answersOpen').val() === true && root.child('games/song-battle/revealedSongs').child($songId).val() !== true && newData.child('songNumber').val() === root.child('games/song-battle/currentSong').val() && root.child('songBattleParticipants').child($teamId).child('claimantId').val() === auth.uid && $teamId === root.child('players').child(auth.uid).child('teamId').val() && ($teamId === 'draco' || $teamId === 'serpens' || $teamId === 'lupus' || $teamId === 'corvus' || $teamId === 'noctua') && $songId === 'song-' + newData.child('songNumber').val() && newData.child('playerName').val() === root.child('players').child(auth.uid).child('playerName').val() && newData.child('claimantId').val() === auth.uid && (newData.child('title').val().length > 0 || newData.child('artist').val().length > 0)",
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || newData.hasChildren([\"songNumber\",\"title\",\"artist\",\"playerName\",\"claimantId\",\"updatedAt\"])",
+          "songNumber": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isNumber() && newData.val() >= 1 && newData.val() <= 6 && newData.val() % 1 === 0)"
+          },
+          "title": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val().length <= 120)"
+          },
+          "artist": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val().length <= 120)"
+          },
+          "playerName": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val().length > 0 && newData.val().length <= 32)"
+          },
+          "claimantId": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val() === auth.uid)"
+          },
+          "updatedAt": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isNumber() && newData.val() === now)"
+          },
+          "$other": {
+            ".validate": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true"
+          }
         }
       }
     },
     "songBattleParticipants": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
-      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now",
       "$teamId": {
         ".read": "auth != null",
-        ".write": "auth != null && root.child('games/song-battle/status').val() === 'running' && !data.exists() && ($teamId === 'draco' || $teamId === 'serpens' || $teamId === 'lupus' || $teamId === 'corvus' || $teamId === 'noctua') && newData.child('claimantId').val() === auth.uid && newData.child('playerName').isString() && newData.child('playerName').val().length > 0 && newData.child('playerName').val().length <= 32"
+        ".write": "(auth != null && auth.token.firebase.sign_in_provider === 'anonymous') && root.child('settings/mode').val() === 'live' && root.child('games/song-battle/status').val() === 'running' && !data.exists() && ($teamId === 'draco' || $teamId === 'serpens' || $teamId === 'lupus' || $teamId === 'corvus' || $teamId === 'noctua') && $teamId === root.child('players').child(auth.uid).child('teamId').val() && newData.child('playerName').val() === root.child('players').child(auth.uid).child('playerName').val() && newData.child('claimantId').val() === auth.uid",
+        ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || newData.hasChildren([\"claimantId\",\"playerName\",\"joinedAt\"])",
+        "claimantId": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val() === auth.uid)"
+        },
+        "playerName": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val().length > 0 && newData.val().length <= 32)"
+        },
+        "joinedAt": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isNumber() && newData.val() === now)"
+        },
+        "$other": {
+          ".validate": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true"
+        }
       }
     },
-    "songBattleAdmin": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
-      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
-    },
     "novitiusParticipants": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
-      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now",
       "$participantId": {
         ".read": "auth != null && $participantId === auth.uid",
-        ".write": "auth != null && $participantId === auth.uid && !data.exists() && root.child('games/novitius-quiz/status').val() === 'running' && root.child('games/novitius-quiz/registrationOpen').val() === true && newData.child('claimantId').val() === auth.uid && newData.child('playerName').isString() && newData.child('playerName').val().length > 0 && newData.child('playerName').val().length <= 32 && (newData.child('teamId').val() === 'draco' || newData.child('teamId').val() === 'serpens' || newData.child('teamId').val() === 'lupus' || newData.child('teamId').val() === 'corvus' || newData.child('teamId').val() === 'noctua')"
+        ".write": "(auth != null && auth.token.firebase.sign_in_provider === 'anonymous') && $participantId === auth.uid && !data.exists() && root.child('settings/mode').val() === 'live' && root.child('games/novitius-quiz/status').val() === 'running' && root.child('games/novitius-quiz/registrationOpen').val() === true && newData.child('claimantId').val() === auth.uid && newData.child('playerName').val() === root.child('players').child(auth.uid).child('playerName').val() && newData.child('teamId').val() === root.child('players').child(auth.uid).child('teamId').val()",
+        ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || newData.hasChildren([\"claimantId\",\"playerName\",\"teamId\",\"joinedAt\"])",
+        "claimantId": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val() === auth.uid)"
+        },
+        "playerName": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val().length > 0 && newData.val().length <= 32)"
+        },
+        "teamId": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || ((newData.val() === 'draco' || newData.val() === 'serpens' || newData.val() === 'lupus' || newData.val() === 'corvus' || newData.val() === 'noctua'))"
+        },
+        "joinedAt": {
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isNumber() && newData.val() === now)"
+        },
+        "$other": {
+          ".validate": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true"
+        }
       }
     },
     "novitiusAnswers": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
-      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now",
       "$participantId": {
         ".read": "auth != null && $participantId === auth.uid",
         "$questionId": {
-          ".write": "auth != null && $participantId === auth.uid && !data.exists() && root.child('games/novitius-quiz/status').val() === 'running' && root.child('games/novitius-quiz/answersOpen').val() === true && root.child('games/novitius-quiz/questionStates').child($questionId).val() === 'open' && $questionId === 'question-' + root.child('games/novitius-quiz/currentQuestion').val() && root.child('novitiusParticipants').child($participantId).child('claimantId').val() === auth.uid && newData.child('claimantId').val() === auth.uid && newData.child('playerName').isString() && newData.child('playerName').val().length > 0 && newData.child('playerName').val().length <= 32 && newData.child('teamId').val() === root.child('novitiusParticipants').child($participantId).child('teamId').val() && ((root.child('games/novitius-quiz/currentQuestionData/type').val() === 'number' && newData.child('value').isNumber() && newData.child('value').val() >= 0 && newData.child('value').val() % 1 === 0) || (root.child('games/novitius-quiz/currentQuestionData/type').val() === 'time' && newData.child('value').isString() && newData.child('value').val().matches(/^([01][0-9]|2[0-3]):[0-5][0-9]$/)))"
+          ".write": "(auth != null && auth.token.firebase.sign_in_provider === 'anonymous') && $participantId === auth.uid && !data.exists() && root.child('settings/mode').val() === 'live' && root.child('games/novitius-quiz/status').val() === 'running' && root.child('games/novitius-quiz/answersOpen').val() === true && root.child('games/novitius-quiz/questionStates').child($questionId).val() === 'open' && root.child('games/novitius-quiz/revealedQuestions').child($questionId).val() !== true && $questionId === 'question-' + root.child('games/novitius-quiz/currentQuestion').val() && root.child('novitiusParticipants').child($participantId).child('claimantId').val() === auth.uid && newData.child('claimantId').val() === auth.uid && newData.child('playerName').val() === root.child('players').child(auth.uid).child('playerName').val() && newData.child('teamId').val() === root.child('players').child(auth.uid).child('teamId').val() && newData.child('teamId').val() === root.child('novitiusParticipants').child($participantId).child('teamId').val()",
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.hasChildren(['value', 'playerName', 'teamId', 'claimantId', 'createdAt', 'updatedAt']) && newData.parent().parent().parent().child('novitiusSubmissions').child($questionId).child($participantId).child('teamId').val() === newData.child('teamId').val() && newData.parent().parent().parent().child('novitiusSubmissions').child($questionId).child($participantId).child('createdAt').val() === newData.child('createdAt').val())",
+          "value": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || ((root.child('games/novitius-quiz/currentQuestionData/type').val() === 'number' && newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000000000 && newData.val() % 1 === 0) || (root.child('games/novitius-quiz/currentQuestionData/type').val() === 'time' && newData.isString() && newData.val().matches(/^([01][0-9]|2[0-3]):[0-5][0-9]$/)))"
+          },
+          "playerName": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val().length > 0 && newData.val().length <= 32)"
+          },
+          "teamId": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || ((newData.val() === 'draco' || newData.val() === 'serpens' || newData.val() === 'lupus' || newData.val() === 'corvus' || newData.val() === 'noctua'))"
+          },
+          "claimantId": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isString() && newData.val() === auth.uid)"
+          },
+          "createdAt": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isNumber() && newData.val() === now)"
+          },
+          "updatedAt": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isNumber() && newData.val() === now)"
+          },
+          "$other": {
+            ".validate": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true"
+          }
         }
       }
     },
     "novitiusSubmissions": {
       ".read": true,
-      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now",
       "$questionId": {
         "$participantId": {
-          ".write": "auth != null && $participantId === auth.uid && !data.exists() && root.child('novitiusAnswers').child($participantId).child($questionId).exists() && newData.child('teamId').val() === root.child('novitiusParticipants').child($participantId).child('teamId').val()"
+          ".write": "(auth != null && auth.token.firebase.sign_in_provider === 'anonymous') && $participantId === auth.uid && !data.exists() && newData.parent().parent().parent().child('novitiusAnswers').child($participantId).child($questionId).exists() && newData.child('teamId').val() === root.child('players').child(auth.uid).child('teamId').val() && newData.child('teamId').val() === root.child('novitiusParticipants').child($participantId).child('teamId').val()",
+          ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.hasChildren(['teamId', 'createdAt']) && newData.child('teamId').val() === newData.parent().parent().parent().child('novitiusAnswers').child($participantId).child($questionId).child('teamId').val() && newData.child('createdAt').val() === newData.parent().parent().parent().child('novitiusAnswers').child($participantId).child($questionId).child('createdAt').val())",
+          "teamId": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || ((newData.val() === 'draco' || newData.val() === 'serpens' || newData.val() === 'lupus' || newData.val() === 'corvus' || newData.val() === 'noctua'))"
+          },
+          "createdAt": {
+            ".validate": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) || (newData.isNumber() && newData.val() === now)"
+          },
+          "$other": {
+            ".validate": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true"
+          }
         }
       }
     },
+    "songBattleAdmin": {
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now"
+    },
     "novitiusAdmin": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
-      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now"
     },
     "gameChallengesAdmin": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
-      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now"
     },
     "balloonMonsterAdmin": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
-      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now"
     },
     "beerPongAdmin": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
-      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now"
     },
     "huntAdmin": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
-      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now"
     },
     "oracleSecrets": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
-      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now"
     },
     "oracleQuestions": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
-      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now"
+    },
+    "adminOperationReceipt": {
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true && root.child('adminOperationLock/owner').val() === auth.uid && root.child('adminOperationLock/expiresAt').val() > now && newData.child('owner').val() === auth.uid && newData.child('operationId').val() === root.child('adminOperationLock/operationId').val()",
+      ".validate": "newData.hasChildren(['owner', 'operationId', 'updatedAt'])",
+      "owner": {
+        ".validate": "newData.isString() && newData.val() === auth.uid"
+      },
+      "operationId": {
+        ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 64 && newData.val() === root.child('adminOperationLock/operationId').val()"
+      },
+      "updatedAt": {
+        ".validate": "newData.isNumber() && newData.val() === now"
+      },
+      "$other": {
+        ".validate": false
+      }
+    },
+    "adminOperationLock": {
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": "(auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true) && ((!newData.exists() && (!data.exists() || data.child('owner').val() === auth.uid || data.child('expiresAt').val() <= now)) || (newData.exists() && newData.child('owner').val() === auth.uid && (!data.exists() || data.child('expiresAt').val() <= now || (data.child('owner').val() === auth.uid && newData.child('operationId').val() === data.child('operationId').val()))))",
+      ".validate": "newData.hasChildren(['owner', 'operationId', 'expiresAt'])",
+      "owner": {
+        ".validate": "newData.isString() && newData.val() === auth.uid"
+      },
+      "operationId": {
+        ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 64"
+      },
+      "expiresAt": {
+        ".validate": "newData.isNumber() && newData.val() > now && newData.val() <= now + 120000"
+      },
+      "$other": {
+        ".validate": false
+      }
     },
     "admins": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
-      ".write": false
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'password' && root.child('admins').child(auth.uid).val() === true",
+      ".write": false,
+      "$uid": {
+        ".read": "auth != null && $uid === auth.uid"
+      }
     }
   }
 }

@@ -1,4 +1,5 @@
-import { TEAMS } from "./data.js?v=ballon-monster-1";
+import { TEAMS } from "./data.js?v=firebase-live-20261009-1";
+import { serverNow } from "./time.js?v=firebase-live-20261009-1";
 
 export const BEER_PONG = {
   id: "beer-pong",
@@ -17,7 +18,7 @@ export const BEER_PONG_GROUP_MATCHES = [
 
 export function buildBeerPong(status = "running", existing = null) {
   if (!["not-started", "running", "completed"].includes(status)) throw new Error("Ungültiger Beer-Pong-Status.");
-  const now = Date.now(), running = status === "running", completed = status === "completed";
+  const now = serverNow(), running = status === "running", completed = status === "completed";
   return {
     name: BEER_PONG.name,
     round: BEER_PONG.round,
@@ -44,7 +45,7 @@ export function buildBeerPong(status = "running", existing = null) {
 }
 
 export function normaliseBeerPongAdmin(value = null) {
-  return { drafts: { ...(value?.drafts || {}) }, tieBreakRanks: { ...(value?.tieBreakRanks || {}) }, updatedAt: Number(value?.updatedAt || 0) };
+  return { drafts: { ...(value?.drafts || {}) }, tieBreakRanks: { ...(value?.tieBreakRanks || {}) }, finalResult: value?.finalResult || null, finalGame: value?.finalGame || null, updatedAt: Number(value?.updatedAt || 0) };
 }
 
 export function cleanBeerPongResult(match, value = {}) {
@@ -56,12 +57,12 @@ export function cleanBeerPongResult(match, value = {}) {
     const calculated = cupsHitA > cupsHitB ? match.teamA : match.teamB;
     if (winnerId !== calculated) throw new Error("Der bestätigte Sieger widerspricht der Anzahl getroffener Becher.");
   }
-  return { cupsHitA, cupsHitB, winnerId, decidedBy: cupsHitA === cupsHitB ? "tiebreak" : value.decidedBy === "time" ? "time" : "cups", savedAt: Date.now() };
+  return { cupsHitA, cupsHitB, winnerId, decidedBy: cupsHitA === cupsHitB ? "tiebreak" : value.decidedBy === "time" ? "time" : "cups", savedAt: serverNow() };
 }
 
 export function publicBeerPongMatch(match, draft) {
   const result = cleanBeerPongResult(match, draft);
-  return { ...match, status: "completed", published: true, ...result, publishedAt: Date.now() };
+  return { ...match, status: "completed", published: true, ...result, publishedAt: serverNow() };
 }
 
 export function calculateBeerPongGroupTable(game, tieBreakRanks = {}, requireResolved = false) {
@@ -95,7 +96,7 @@ export function calculateBeerPongGroupTable(game, tieBreakRanks = {}, requireRes
 
 export function evaluateBeerPongGroups(game, tieBreakRanks = {}) {
   const table = calculateBeerPongGroupTable(game, tieBreakRanks, true);
-  return { ...game, groupEvaluated: true, groupRanking: table.ranking, groupStandings: table.standings, updatedAt: Date.now() };
+  return { ...game, groupEvaluated: true, groupRanking: table.ranking, groupStandings: table.standings, updatedAt: serverNow() };
 }
 
 export function releaseBeerPongSemifinals(game) {
@@ -111,7 +112,7 @@ export function releaseBeerPongSemifinals(game) {
       "semi-1": knockoutMatch("semi-1", "semifinal", "Halbfinale 1", 1, first, fourth, 6),
       "semi-2": knockoutMatch("semi-2", "semifinal", "Halbfinale 2", 2, second, third, 6)
     },
-    updatedAt: Date.now()
+    updatedAt: serverNow()
   };
 }
 
@@ -123,7 +124,7 @@ export function releaseBeerPongFinal(game) {
     phase: "final",
     finalReleased: true,
     matches: { ...game.matches, final: knockoutMatch("final", "final", "The Final Battle", 1, semi1.winnerId, semi2.winnerId, 10) },
-    updatedAt: Date.now()
+    updatedAt: serverNow()
   };
 }
 
@@ -146,7 +147,7 @@ export function completeBeerPong(game) {
     winnerIds: [ranking[0]],
     finalReveal: !!game.finalReveal,
     resultText: ranking.map((id, index) => `${index + 1}. ${teamName(id)}`).join(" · "),
-    updatedAt: Date.now()
+    updatedAt: serverNow()
   };
 }
 
@@ -157,12 +158,12 @@ export function beerPongMatchList(game) {
 export function beerPongTieGroups(game) { return calculateBeerPongGroupTable(game).tieGroups; }
 
 export function resetBeerPongKnockouts(game) {
-  return { ...game, status: "running", phase: "groups", currentRound: Math.min(3, Math.max(1, Number(game?.currentRound) || 1)), groupEvaluated: false, groupRanking: [], groupStandings: [], semifinalsReleased: false, finalReleased: false, matches: groupMatchesOnly(game.matches), ranking: [], placements: {}, points: emptyTeamValues(), winnerIds: [], resultText: "", finalReveal: false, updatedAt: Date.now() };
+  return { ...game, status: "running", phase: "groups", currentRound: Math.min(3, Math.max(1, Number(game?.currentRound) || 1)), groupEvaluated: false, groupRanking: [], groupStandings: [], semifinalsReleased: false, finalReleased: false, matches: groupMatchesOnly(game.matches), ranking: [], placements: {}, points: emptyTeamValues(), winnerIds: [], resultText: "", finalReveal: false, updatedAt: serverNow() };
 }
 
 export function resetBeerPongFinal(game) {
   const matches = { ...(game?.matches || {}) }; delete matches.final;
-  return { ...game, status: "running", phase: "semifinals", finalReleased: false, matches, ranking: [], placements: {}, points: emptyTeamValues(), winnerIds: [], resultText: "", finalReveal: false, updatedAt: Date.now() };
+  return { ...game, status: "running", phase: "semifinals", finalReleased: false, matches, ranking: [], placements: {}, points: emptyTeamValues(), winnerIds: [], resultText: "", finalReveal: false, updatedAt: serverNow() };
 }
 
 export function emptyBeerPongPoints() { return emptyTeamValues(); }
@@ -173,7 +174,7 @@ function groupMatchesOnly(matches = {}) { return Object.fromEntries(BEER_PONG_GR
 function stageOrder(stage) { return ({ group: 0, semifinal: 1, final: 2 })[stage] ?? 9; }
 function teamName(id) { return TEAMS.find(team => team.id === id)?.name || id; }
 function emptyTeamValues() { return Object.fromEntries(TEAMS.map(team => [team.id, 0])); }
-function integerRange(value, min, max, label) { const number = Number(value); if (!Number.isInteger(number) || number < min || number > max) throw new Error(`${label} muss eine ganze Zahl zwischen ${min} und ${max} sein.`); return number; }
+function integerRange(value, min, max, label) { const number = Number(value); if (!(typeof value === "number" || typeof value === "string" && value.trim() !== "") || !Number.isInteger(number) || number < min || number > max) throw new Error(`${label} muss eine ganze Zahl zwischen ${min} und ${max} sein.`); return number; }
 function compareGroupStats(a, b) { return b.groupPoints - a.groupPoints || b.cupDifference - a.cupDifference || b.cupsHit - a.cupsHit; }
 function exactTieGroups(rows) {
   const groups = new Map();

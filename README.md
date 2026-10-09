@@ -4,38 +4,23 @@ Mobile Live-Rangliste für das Probeweekend der Guggenmusik Rosswöschwyber. Die
 
 ## Lokal testen
 
-Ohne Firebase-Konfiguration läuft die Website automatisch im lokalen Demomodus. `index.html` über einen lokalen Webserver öffnen (ES-Module funktionieren nicht zuverlässig direkt über `file://`).
+Die produktive Website verwendet Firebase Realtime Database. Es gibt keinen automatischen Rückfall auf lokale Demodaten. `index.html` über einen lokalen Webserver öffnen (ES-Module funktionieren nicht zuverlässig direkt über `file://`).
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Danach `http://localhost:8000` beziehungsweise `/admin.html` öffnen. Daten werden im Browser gespeichert.
-Der Adminbereich ist im Demomodus automatisch offen. Sobald Firebase konfiguriert
-ist, wird er ausschliesslich über die dort eingerichteten Admin-Konten geschützt.
+Danach `http://localhost:8000` beziehungsweise `/admin.html` öffnen. Auch die lokale Seite verwendet die konfigurierte Firebase-Datenbank; produktive Daten deshalb nicht für Testläufe verwenden. Der Adminbereich benötigt ein mit E-Mail und Passwort angemeldetes, ausdrücklich freigeschaltetes Konto.
 
 ## Firebase einmalig einrichten
 
-1. In der Firebase Console ein Projekt und eine Web-App erstellen.
-2. Realtime Database in der Region `europe-west1` erstellen.
-3. Authentication → Sign-in method → **E-Mail/Passwort und Anonym aktivieren**. Anonyme Konten werden für die einmalige Nachtjagd-Wertung verwendet.
-4. Unter Authentication zwei Benutzer für Andy und Livio anlegen und deren UID kopieren.
-5. In der Realtime Database einmalig folgende Daten erfassen:
+Das bestehende Projekt heisst `regnum-noctis-2026`. `firebase-config.js` enthält exakt dessen öffentliche Web-Konfiguration. Die Datenbank-URL muss aus der Realtime-Database-Console übernommen werden; Region und Hostname werden nicht erraten. Firebase Hosting wird nicht verwendet.
 
-```json
-{
-  "admins": {
-    "UID_VON_ANDY": true,
-    "UID_VON_LIVIO": true
-  },
-  "settings": {
-    "mode": "live"
-  }
-}
-```
+Authentication benötigt **E-Mail/Passwort** für Admins und **Anonym** für die Teilnahme. Reine öffentliche Ranglistenbesucher benötigen keine Anmeldung. Der GitHub-Pages-Hostname `andi201andi201.github.io` muss in den autorisierten Authentication-Domains eingetragen sein. Nur Passwortkonten mit `true` unter `/admins/{uid}` erhalten Adminrechte; eine anonyme UID erhält selbst bei einer versehentlichen Allowlist-Freigabe keine Adminrechte. Die Allowlist lässt sich aus der Website nicht ändern. Admins verwenden Session-Persistenz; Abmelden beendet alle privaten Abonnements.
 
-6. Den Inhalt aus `database.rules.json` unter Realtime Database → Rules veröffentlichen.
-7. Die Werte in `firebase-config.js` durch die Konfiguration der Web-App ersetzen und committen. Firebase Web-Konfiguration ist öffentlich gedacht; Schutz entsteht durch Authentication und Database Rules, nicht durch Verbergen der API-Key-Zeichenfolge.
+Die geprüften Regeln aus `database.rules.json` werden in der Console veröffentlicht. Vorbereitete Novitius-Lösungen und Challenge-Schätzfragen liegen ausschliesslich unter `novitiusAdmin` beziehungsweise `gameChallengesAdmin`, nicht in öffentlichen JavaScript-Dateien. Der getrennt bereitgestellte Startdaten-Import enthält diese Inhalte sowie beide Admin-UIDs. Vor jedem Import bestehende Daten exportieren und prüfen; einen Wurzelimport nur bei einer leeren Datenbank oder einem ausdrücklich gewollten vollständigen Neustart verwenden. Frühere Standardlösungen in der öffentlichen Git-Historie lassen sich durch diese Änderung nicht geheim machen; tatsächliche Wettkampflösungen bei Bedarf im geschützten Adminbereich ändern.
+
+Firebase-Web-Konfiguration ist öffentlich. Schutz entsteht durch Authentication und Database Rules, nicht durch Verbergen des API-Keys. Passwörter und Service-Account-Schlüssel gehören nicht ins Repository oder in Datenbankdaten.
 
 ## GitHub Pages
 
@@ -44,6 +29,8 @@ Der Workflow in `.github/workflows/pages.yml` veröffentlicht `main` automatisch
 ## Datenmodell
 
 - `games/{id}`: Spielname, Runde, Kurzresultat, Punkte aller fünf Reiche, Zeitstempel
+- `players/{uid}`: private, unveränderliche Zuordnung eines anonymen Geräts zu Name und Reich
+- `adminOperationLock` / `adminOperationReceipt`: private technische Sperre und Operationsbeleg für konkurrierende Adminänderungen; enthalten keine Spielpunkte
 - `songBattleAnswers/{teamId}/song-{nr}`: laufende Teamantworten; in der Teilnehmeransicht wird nur das eigene Reich abonniert
 - `songBattleParticipants/{teamId}`: reserviert die Eingabe für genau eine Person beziehungsweise ein Gerät pro Reich
 - `songBattleAdmin`: geschützte manuelle Bewertungen und interne Song-Battle-Punkte
@@ -64,6 +51,8 @@ Der Workflow in `.github/workflows/pages.yml` veröffentlicht `main` automatisch
 - `admins/{uid}`: Freigabe für Schreibzugriff
 
 Die Gesamtpunkte werden aus allen Spielresultaten berechnet. Korrekturen wirken dadurch sofort und ohne separate Summenpflege.
+
+Countdowns und Auslosungsanimationen verwenden `.info/serverTimeOffset` und den zentral gespeicherten Endzeitpunkt. Teilnehmerzeitstempel entstehen mit `serverTimestamp()`. Adminänderungen werden auf allen Geräten serialisiert und durch Regeln gegen abgelaufene oder überholte Operationen geschützt. Offline- beziehungsweise Berechtigungsprobleme werden auf der Seite angezeigt.
 
 ## Ballon-Monster
 
@@ -185,14 +174,14 @@ Reiche erreichen die Halbfinals (1 gegen 4 und 2 gegen 3), das Finale wird mit
 zehn Bechern und ohne Zeitlimit gespielt. Platz drei und vier richten sich nach
 der ursprünglichen Gruppenplatzierung der beiden Halbfinalverlierer.
 
-Der Abschluss ersetzt immer denselben Spielstand und vergibt genau einmal
-5 / 4 / 3 / 2 / 1 Tagespunkte. Für Korrekturen können Finale oder gesamte
+Der Abschluss bereitet 5 / 4 / 3 / 2 / 1 Tagespunkte im geschützten Endentwurf vor.
+Erst die bewusste Enthüllung ersetzt den einzigen öffentlichen Spieleintrag samt Punkten. Vorher sind Finalresultat, Endrang und Tagespunkte auch über direkte Datenbankabfragen verborgen. Für Korrekturen können Finale oder gesamte
 KO-Phase kontrolliert zurückgesetzt und neu freigegeben werden. Auf den Handys
 erscheint währenddessen nur ein kompakter Verweis auf den Grossbildschirm. Die
 TV-Ansicht wechselt in eine eigene Turnierarena mit aktueller Runde,
 Gruppenrangliste und den phasengerechten Kurzregeln für 6 beziehungsweise 10
-Becher. Nach dem Finale bleiben Turnierresultat und neue Tagespunkte auch auf
-den Handys verborgen; dort verweist nur eine Karte auf den Grossbildschirm.
+Becher. Nach dem Finale verweist auf den Handys eine Karte auf den Grossbildschirm;
+der TV zeigt bis zur Enthüllung einen neutralen Wartehinweis.
 Erst **Regnum-Noctis-Sieger enthüllen** zeigt den Gesamtsieger aus allen
 Tagespunkten bildschirmfüllend.
 
