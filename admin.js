@@ -1,6 +1,7 @@
-import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=novitius-2";
-import { getStore } from "./store.js?v=novitius-2";
-import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=novitius-2";
+import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=challenges-1";
+import { getStore } from "./store.js?v=challenges-1";
+import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=challenges-1";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, CHALLENGE_STATIONS, normaliseGameChallengesAdmin, challengeEstimateQuestions, stationById, challengeTimerRemaining, calculateGameChallenges } from "./challenges-data.js?v=challenges-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -8,6 +9,7 @@ let currentState = null, editingId = null;
 let songAnswers = {}, songParticipants = {}, songAdmin = { evaluations: {}, internalPoints: {} }, songAnswersUnsubscribe = null, songParticipantsUnsubscribe = null, songAdminUnsubscribe = null;
 let songReviewNumber = 1;
 let novitiusAdmin = { questions: {} }, novitiusParticipants = {}, novitiusAnswers = {}, novitiusAdminUnsubscribe = null, novitiusParticipantsUnsubscribe = null, novitiusAnswersUnsubscribe = null, novitiusReviewNumber = 1;
+let challengesAdmin = normaliseGameChallengesAdmin(), challengesAdminUnsubscribe = null, challengeReviewRound = 1, challengeEditorSignature = "", lastChallengeCurrentRound = 0;
 let huntAdmin = { targets: normaliseHuntTargets() }, huntAdminUnsubscribe = null, huntTargetSignature = "";
 
 $("#songRoundSelect").innerHTML = Array.from({ length: SONG_BATTLE.songCount }, (_, index) => `<option value="${index + 1}">Song ${index + 1} von ${SONG_BATTLE.songCount}</option>`).join("");
@@ -134,6 +136,21 @@ $("#novitiusQuestionForm").addEventListener("submit", async event => {
   } catch (error) { $("#novitiusQuestionMessage").textContent = error.message; }
 });
 
+$("#challengeReviewRound").innerHTML = Array.from({ length: GAME_CHALLENGES.roundCount }, (_, index) => `<option value="${index + 1}">Runde ${index + 1}</option>`).join("");
+$("#startGameChallenges").addEventListener("click", async () => { if (!confirm("Game Challenges mit Runde 1 starten? Bisherige Game-Challenges-Resultate werden ersetzt.")) return; await withDisabled($("#startGameChallenges"), async () => { await store.startGameChallenges(); challengeReviewRound = 1; toast("Game Challenges gestartet"); }); });
+$("#resetGameChallenges").addEventListener("click", async () => { if (!confirm("Game Challenges vollständig zurücksetzen? Resultate und Tagespunkte dieses Spiels werden entfernt.")) return; await withDisabled($("#resetGameChallenges"), async () => { await store.resetGameChallenges(); challengeReviewRound = 1; toast("Game Challenges zurückgesetzt"); }); });
+$("#startChallengeTimer").addEventListener("click", async () => { try { await store.startGameChallengeTimer(); } catch (error) { toast(error.message); } });
+$("#pauseChallengeTimer").addEventListener("click", async () => { try { await store.pauseGameChallengeTimer(); } catch (error) { toast(error.message); } });
+$("#resetChallengeTimer").addEventListener("click", async () => { try { await store.resetGameChallengeTimer(); } catch (error) { toast(error.message); } });
+$("#endChallengeRound").addEventListener("click", async () => { try { await store.endGameChallengeRound(); toast("Runde beendet · Resultate erfassen"); } catch (error) { toast(error.message); } });
+$("#challengeReviewRound").addEventListener("change", event => { challengeReviewRound = Number(event.target.value); renderGameChallengesAdmin(currentState); });
+$("#challengeRoundForm").addEventListener("submit", async event => { event.preventDefault(); $("#challengeRoundMessage").textContent = ""; try { await store.saveGameChallengeRound(challengeReviewRound, collectChallengeRoundEntries()); toast(`Runde ${challengeReviewRound} gespeichert`); } catch (error) { $("#challengeRoundMessage").textContent = error.message; } });
+$("#publishChallengeRound").addEventListener("click", async () => { $("#challengeRoundMessage").textContent = ""; try { await store.saveGameChallengeRound(challengeReviewRound, collectChallengeRoundEntries()); await store.publishGameChallengeRound(challengeReviewRound); toast(`Runde ${challengeReviewRound} veröffentlicht`); } catch (error) { $("#challengeRoundMessage").textContent = error.message; } });
+$("#nextChallengeRound").addEventListener("click", async () => { try { const next = Number(currentState?.games?.[GAME_CHALLENGES.id]?.currentRound || 1) + 1; await store.nextGameChallengeRound(); challengeReviewRound = next; renderGameChallengesAdmin(currentState); toast("Nächste Runde bereit"); } catch (error) { toast(error.message); } });
+$("#challengeEstimateEditors").addEventListener("submit", async event => { const form = event.target.closest("form[data-estimate-question]"); if (!form) return; event.preventDefault(); try { await store.saveGameChallengeEstimateQuestion(form.dataset.estimateQuestion, { text: form.elements.text.value, unit: form.elements.unit.value, correctValue: form.elements.correctValue.value, enabled: form.elements.enabled.checked }); toast("Schätzfrage gespeichert"); } catch (error) { toast(error.message); } });
+$("#revealChallengeEstimate").addEventListener("click", async () => { try { await store.revealGameChallengeEstimate(); toast("Schätz-Challenge aufgelöst"); } catch (error) { toast(error.message); } });
+$("#finishGameChallenges").addEventListener("click", async () => { const button = $("#finishGameChallenges"); button.disabled = true; $("#challengeFinishMessage").textContent = ""; try { await store.finishGameChallenges(); toast("Game Challenges abgeschlossen · Tagespunkte aktualisiert"); } catch (error) { $("#challengeFinishMessage").textContent = error.message; } finally { button.disabled = false; } });
+
 $("#scoreInputs").innerHTML = TEAMS.map(team => `<label class="score-field" style="--team:${team.color}"><span><i></i>${team.name}</span><input id="score-${team.id}" type="number" inputmode="numeric" value="0" step="1" required></label>`).join("");
 if (store.demo) setAccess(true);
 else {
@@ -212,12 +229,17 @@ $("#adminResults").addEventListener("click", async event => {
     if (confirm("Novitius-Quiz vollständig zurücksetzen? Teilnahmen, Antworten und Punkte werden entfernt; die vorbereiteten Fragen bleiben erhalten.")) { await store.resetNovitiusGame(); toast("Novitius-Quiz zurückgesetzt"); }
     return;
   }
+  if (action === "delete" && id === GAME_CHALLENGES.id) {
+    if (confirm("Game Challenges vollständig zurücksetzen? Resultate und Punkte werden entfernt; die Schätzfragen bleiben erhalten.")) { await store.resetGameChallenges(); toast("Game Challenges zurückgesetzt"); }
+    return;
+  }
   if (action === "delete" && confirm("Dieses Resultat wirklich löschen? Die Rangliste wird sofort neu berechnet.")) { await store.deleteGame(id); toast("Resultat gelöscht"); if (editingId === id) resetForm(); }
 });
 
 function renderAdmin(state) {
   renderSongBattleAdmin(state);
   renderNovitiusAdmin(state);
+  renderGameChallengesAdmin(state);
   renderHuntAdmin(state);
   const mode = state.settings.mode || "live";
   document.querySelectorAll("[data-mode]").forEach(button => button.classList.toggle("active", button.dataset.mode === mode));
@@ -226,6 +248,73 @@ function renderAdmin(state) {
   $("#adminResults").innerHTML = games.map(game => `<article class="admin-result"><div><span>${formatTime(game.createdAt, true)}</span><strong>${escapeHtml(game.name)}</strong><small>${escapeHtml(game.round || game.resultText || "")}</small></div><div class="admin-actions"><button data-action="edit" data-id="${game.id}">Bearbeiten</button><button class="danger" data-action="delete" data-id="${game.id}">Löschen</button></div></article>`).join("");
   $("#adminEmpty").classList.toggle("hidden", games.length > 0);
 }
+
+function renderGameChallengesAdmin(state) {
+  const game = state?.games?.[GAME_CHALLENGES.id], status = game?.status || "not-started", running = status === "running", completed = status === "completed";
+  if (running && Number(game.currentRound || 1) !== lastChallengeCurrentRound) { lastChallengeCurrentRound = Number(game.currentRound || 1); challengeReviewRound = lastChallengeCurrentRound; }
+  challengeReviewRound = Math.min(5, Math.max(1, challengeReviewRound));
+  $("#gameChallengesAdminStatus").textContent = GAME_STATUSES[status] || GAME_STATUSES["not-started"];
+  $("#startGameChallenges").classList.toggle("hidden", status !== "not-started");
+  $("#resetGameChallenges").classList.toggle("hidden", status === "not-started");
+  $("#gameChallengesControls").classList.toggle("hidden", status === "not-started");
+  if (status === "not-started") return;
+  const round = Number(game.currentRound || 1), timerStatus = game.timer?.status || "idle";
+  $("#challengeCurrentRound").textContent = `Runde ${round} von ${GAME_CHALLENGES.roundCount}`;
+  updateChallengeAdminTimer();
+  $("#startChallengeTimer").classList.toggle("hidden", !running || timerStatus === "running");
+  $("#pauseChallengeTimer").classList.toggle("hidden", !running || timerStatus !== "running");
+  $("#resetChallengeTimer").classList.toggle("hidden", !running);
+  $("#endChallengeRound").classList.toggle("hidden", !running || game.phase === "results" || game.phase === "published");
+  $("#challengeRotation").innerHTML = TEAMS.map(team => { const station = stationById(GAME_CHALLENGE_ROTATIONS[`round-${round}`][team.id]); return `<div style="--team:${team.color}"><span>${team.marker} ${team.name}</span><strong>${station.icon} ${escapeHtml(station.name)}</strong></div>`; }).join("");
+  $("#challengeReviewRound").value = String(challengeReviewRound);
+  renderChallengeRoundInputs(challengeReviewRound);
+  const published = !!game.roundPublished?.[`round-${challengeReviewRound}`];
+  $("#publishChallengeRound").textContent = published ? "Veröffentlichung aktualisieren" : "Runde veröffentlichen";
+  $("#nextChallengeRound").classList.toggle("hidden", !running || challengeReviewRound !== round || round >= 5 || !published);
+  $("#revealChallengeEstimate").classList.toggle("hidden", !!game.estimateRevealed || !running);
+  $("#challengeEstimateRevealHelp").textContent = game.estimateRevealed ? "✓ Lösungen und Schätzungen sind veröffentlicht. Korrekturen werden automatisch aktualisiert." : "Die Lösungen und Schätzungen werden erst nach allen fünf veröffentlichten Runden sichtbar.";
+  renderChallengeEstimateEditors();
+  const finalReady = completed || (!!game.estimateRevealed && Array.from({ length: 5 }, (_, i) => game.roundPublished?.[`round-${i + 1}`]).every(Boolean));
+  $("#challengeFinalisation").classList.toggle("hidden", !finalReady);
+  if (finalReady) renderChallengeFinalisation(game);
+}
+
+function updateChallengeAdminTimer() {
+  const game = currentState?.games?.[GAME_CHALLENGES.id]; if (!game || game.status === "not-started") return;
+  const remaining = challengeTimerRemaining(game.timer), seconds = Math.ceil(remaining / 1000);
+  $("#challengeTimer").textContent = remaining <= 0 && game.timer?.status === "running" ? "WECHSEL" : `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+setInterval(updateChallengeAdminTimer, 250);
+
+function renderChallengeRoundInputs(round) {
+  const assignments = GAME_CHALLENGE_ROTATIONS[`round-${round}`];
+  $("#challengeRoundInputs").innerHTML = TEAMS.map(team => {
+    const station = stationById(assignments[team.id]);
+    if (station.id === "estimate") return `<article style="--team:${team.color}"><header><strong>${team.marker} ${team.name}</strong><span>${station.icon} ${station.name}</span></header>${challengeEstimateQuestions(challengesAdmin).map(question => `<label>${escapeHtml(question.text)}<span><input data-challenge-team="${team.id}" data-estimate="${question.id}" type="number" min="0" step="any" value="${escapeAttribute(question.estimates?.[team.id] ?? "")}" required> ${escapeHtml(question.unit)}</span></label>`).join("")}</article>`;
+    const value = challengesAdmin.results?.[station.id]?.[team.id] ?? "";
+    return `<article style="--team:${team.color}"><header><strong>${team.marker} ${team.name}</strong><span>${station.icon} ${station.name}</span></header><label>${escapeHtml(station.resultLabel)}<span><input data-challenge-team="${team.id}" data-result="${station.id}" type="number" min="0" ${station.max ? `max="${station.max}"` : ""} step="${station.integer ? 1 : "any"}" value="${escapeAttribute(value)}" required> ${escapeHtml(station.unit)}</span></label></article>`;
+  }).join("");
+}
+
+function collectChallengeRoundEntries() {
+  const entries = Object.fromEntries(TEAMS.map(team => [team.id, { estimates: {} }]));
+  $("#challengeRoundInputs").querySelectorAll("input[data-challenge-team]").forEach(input => { const entry = entries[input.dataset.challengeTeam]; if (input.dataset.estimate) entry.estimates[input.dataset.estimate] = input.value; else entry.value = input.value; });
+  return entries;
+}
+
+function renderChallengeEstimateEditors() {
+  const signature = JSON.stringify(challengesAdmin.estimateQuestions); if (signature === challengeEditorSignature) return; challengeEditorSignature = signature;
+  $("#challengeEstimateEditors").innerHTML = Object.values(challengesAdmin.estimateQuestions).sort((a, b) => a.number - b.number).map(question => `<form data-estimate-question="${question.id}"><div class="challenge-estimate-head"><strong>Schätzfrage ${question.number}</strong><label><input name="enabled" type="checkbox" ${question.enabled !== false ? "checked" : ""}> aktiv</label></div><label>Frage<input name="text" maxlength="180" value="${escapeAttribute(question.text)}" required></label><div class="form-grid"><label>Einheit<input name="unit" maxlength="30" value="${escapeAttribute(question.unit)}"></label><label>Richtiges Ergebnis<input name="correctValue" type="number" min="0" step="any" value="${escapeAttribute(question.correctValue ?? "")}" placeholder="später möglich"></label></div><button class="secondary-button" type="submit">Schätzfrage speichern</button></form>`).join("");
+}
+
+function renderChallengeFinalisation(game) {
+  let result = game;
+  if (game.status !== "completed") { try { result = calculateGameChallenges(game, challengesAdmin); } catch (error) { $("#challengeFinishMessage").textContent = error.message; return; } }
+  $("#challengeFinalRanking").innerHTML = result.ranking.map(teamId => { const team = TEAMS.find(item => item.id === teamId), place = result.placements[teamId]; return `<div class="song-final-row" style="--team:${team.color}"><strong>${place}. ${team.marker} ${team.name}</strong><span>${result.internalPoints[teamId]}/25 · ${result.stationWins[teamId]} Stationssiege · +${result.points[teamId]}</span></div>`; }).join("");
+  $("#finishGameChallenges").textContent = completedLabel(game.status);
+}
+
+function completedLabel(status) { return status === "completed" ? "Korrekturen übernehmen · Punkte aktualisieren" : "Spiel abschliessen · Tagespunkte vergeben"; }
 
 async function activateSongRound(songNumber) {
   const game = currentState?.games?.[SONG_BATTLE.id];
@@ -466,7 +555,7 @@ function renderHuntAdmin(state) {
   $("#huntAdminHistory").innerHTML = [...finds].sort((a, b) => b.createdAt - a.createdAt).map(find => { const team = TEAMS.find(item => item.id === find.teamId); const target = huntAdmin.targets?.[find.targetId]; return `<div style="--team:${team?.color || "#888"}"><time>${formatTime(find.createdAt)}</time><span><strong>Gegenstand ${find.targetNumber}</strong> · ${escapeHtml(target?.internalName || find.targetId)}<small>von ${escapeHtml(find.playerName)} · ${team?.marker || ""} ${team?.name || find.teamId}${find.manual ? " · manuell" : ""}</small></span><b>+${Number(find.awardedPoints || 1)}</b></div>`; }).join("") || '<p class="empty-state">Noch keine Funde.</p>';
 }
 
-function loadEdit(id) { if (id === SONG_BATTLE.id) { songReviewNumber = 1; renderSongBattleAdmin(currentState); $("#songBattleAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === NOVITIUS_GAME.id) { novitiusReviewNumber = 1; renderNovitiusAdmin(currentState); $("#novitiusAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } const game = currentState.games[id]; if (!game) return; editingId = id; $("#formTitle").textContent = "Resultat korrigieren"; $("#cancelEdit").classList.remove("hidden"); $("#gameName").value = game.name || ""; $("#roundName").value = game.round || ""; $("#resultText").value = game.resultText || ""; TEAMS.forEach(team => $(`#score-${team.id}`).value = Number(game.points?.[team.id] || 0)); $("#resultForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
+function loadEdit(id) { if (id === SONG_BATTLE.id) { songReviewNumber = 1; renderSongBattleAdmin(currentState); $("#songBattleAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === NOVITIUS_GAME.id) { novitiusReviewNumber = 1; renderNovitiusAdmin(currentState); $("#novitiusAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === GAME_CHALLENGES.id) { challengeReviewRound = 1; renderGameChallengesAdmin(currentState); $("#gameChallengesAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } const game = currentState.games[id]; if (!game) return; editingId = id; $("#formTitle").textContent = "Resultat korrigieren"; $("#cancelEdit").classList.remove("hidden"); $("#gameName").value = game.name || ""; $("#roundName").value = game.round || ""; $("#resultText").value = game.resultText || ""; TEAMS.forEach(team => $(`#score-${team.id}`).value = Number(game.points?.[team.id] || 0)); $("#resultForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
 function resetForm() { editingId = null; $("#resultForm").reset(); TEAMS.forEach(team => $(`#score-${team.id}`).value = 0); $("#formTitle").textContent = "Spielresultat erfassen"; $("#cancelEdit").classList.add("hidden"); $("#saveMessage").textContent = ""; }
 function toast(message) { $("#toast").textContent = message; $("#toast").classList.add("show"); setTimeout(() => $("#toast").classList.remove("show"), 2200); }
 async function withDisabled(button, action) { button.disabled = true; try { await action(); } catch (error) { toast(`Speichern fehlgeschlagen: ${error.message}`); } finally { button.disabled = false; } }
@@ -478,6 +567,7 @@ function setAccess(granted) {
   if (granted && !novitiusAdminUnsubscribe) novitiusAdminUnsubscribe = store.subscribeNovitiusAdmin(value => { novitiusAdmin = value; renderNovitiusQuestionList(); if (currentState) renderNovitiusAdmin(currentState); });
   if (granted && !novitiusParticipantsUnsubscribe) novitiusParticipantsUnsubscribe = store.subscribeNovitiusParticipants(value => { novitiusParticipants = value; if (currentState) renderNovitiusAdmin(currentState); });
   if (granted && !novitiusAnswersUnsubscribe) novitiusAnswersUnsubscribe = store.subscribeNovitiusAnswers(value => { novitiusAnswers = value; if (currentState) renderNovitiusAdmin(currentState); });
+  if (granted && !challengesAdminUnsubscribe) challengesAdminUnsubscribe = store.subscribeGameChallengesAdmin(value => { challengesAdmin = value; challengeEditorSignature = ""; if (currentState) renderGameChallengesAdmin(currentState); });
   if (granted && !huntAdminUnsubscribe) huntAdminUnsubscribe = store.subscribeHuntAdmin(value => { huntAdmin = value; huntTargetSignature = ""; if (currentState) renderHuntAdmin(currentState); });
   if (!granted && songAnswersUnsubscribe) { songAnswersUnsubscribe(); songAnswersUnsubscribe = null; songAnswers = {}; }
   if (!granted && songParticipantsUnsubscribe) { songParticipantsUnsubscribe(); songParticipantsUnsubscribe = null; songParticipants = {}; }
@@ -485,6 +575,7 @@ function setAccess(granted) {
   if (!granted && novitiusAdminUnsubscribe) { novitiusAdminUnsubscribe(); novitiusAdminUnsubscribe = null; novitiusAdmin = { questions: {} }; }
   if (!granted && novitiusParticipantsUnsubscribe) { novitiusParticipantsUnsubscribe(); novitiusParticipantsUnsubscribe = null; novitiusParticipants = {}; }
   if (!granted && novitiusAnswersUnsubscribe) { novitiusAnswersUnsubscribe(); novitiusAnswersUnsubscribe = null; novitiusAnswers = {}; }
+  if (!granted && challengesAdminUnsubscribe) { challengesAdminUnsubscribe(); challengesAdminUnsubscribe = null; challengesAdmin = normaliseGameChallengesAdmin(); challengeEditorSignature = ""; }
   if (!granted && huntAdminUnsubscribe) { huntAdminUnsubscribe(); huntAdminUnsubscribe = null; huntAdmin = { targets: normaliseHuntTargets() }; huntTargetSignature = ""; }
 }
 function humanAuthError(code) { return ({ "auth/invalid-credential": "E-Mail oder Passwort ist falsch.", "auth/too-many-requests": "Zu viele Versuche. Bitte kurz warten.", "auth/network-request-failed": "Keine Verbindung. Bitte Internet prüfen." })[code] || "Login fehlgeschlagen."; }

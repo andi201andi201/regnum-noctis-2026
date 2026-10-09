@@ -1,6 +1,7 @@
 import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
-import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, rebuildNovitiusReveals, finalizeNovitiusGame, scoreNovitiusAnswer } from "./data.js?v=novitius-2";
-import { HUNT_DEFAULT_TARGETS, HUNT_POINTS_PER_OBJECT, normaliseHuntTargets, huntTargetList } from "./hunt-data.js?v=novitius-2";
+import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, rebuildNovitiusReveals, finalizeNovitiusGame, scoreNovitiusAnswer } from "./data.js?v=challenges-1";
+import { HUNT_DEFAULT_TARGETS, HUNT_POINTS_PER_OBJECT, normaliseHuntTargets, huntTargetList } from "./hunt-data.js?v=challenges-1";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, buildGameChallenges, normaliseGameChallengesAdmin, cleanEstimateQuestion, cleanChallengeResult, cleanEstimateValue, buildChallengePublicRound, buildPublicEstimate, calculateGameChallenges, challengeEstimateQuestions, challengeTimerRemaining, emptyChallengeTimer } from "./challenges-data.js?v=challenges-1";
 
 const STORAGE_KEY = "regnum-noctis-demo";
 let firebase = null;
@@ -42,6 +43,7 @@ function firebaseStore() {
     subscribeNovitiusAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "novitiusAdmin"), snapshot => callback(normaliseNovitiusAdmin(snapshot.val()))); },
     subscribeNovitiusParticipants(callback) { return firebase.onValue(firebase.ref(firebase.db, "novitiusParticipants"), snapshot => callback(snapshot.val() || {})); },
     subscribeNovitiusAnswers(callback) { return firebase.onValue(firebase.ref(firebase.db, "novitiusAnswers"), snapshot => callback(snapshot.val() || {})); },
+    subscribeGameChallengesAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "gameChallengesAdmin"), snapshot => callback(normaliseGameChallengesAdmin(snapshot.val()))); },
     subscribeHuntAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "huntAdmin"), snapshot => callback({ targets: normaliseHuntTargets(snapshot.val()?.targets) })); },
     async subscribeSongBattleTeam(teamId, callback) {
       if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
@@ -345,6 +347,78 @@ function firebaseStore() {
         "settings/updatedAt": firebase.serverTimestamp()
       });
     },
+    async startGameChallenges() {
+      const admin = resetGameChallengesAdmin((await firebase.get(firebase.ref(firebase.db, "gameChallengesAdmin"))).val());
+      await firebase.update(firebase.ref(firebase.db), { [`games/${GAME_CHALLENGES.id}`]: buildGameChallenges("running"), gameChallengesAdmin: admin, "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async startGameChallengeTimer() {
+      const gameRef = firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`), game = (await firebase.get(gameRef)).val();
+      if (game?.status !== "running") throw new Error("Game Challenges laufen nicht.");
+      const remainingMs = game?.timer?.status === "idle" ? GAME_CHALLENGES.durationSeconds * 1000 : challengeTimerRemaining(game.timer), now = Date.now();
+      if (remainingMs <= 0) throw new Error("Die Zeit ist abgelaufen. Bitte die Runde beenden oder den Timer zurücksetzen.");
+      await firebase.update(gameRef, { phase: "running", timer: { status: "running", durationMs: GAME_CHALLENGES.durationSeconds * 1000, remainingMs, startedAt: now, endsAt: now + remainingMs }, updatedAt: firebase.serverTimestamp() });
+    },
+    async pauseGameChallengeTimer() {
+      const gameRef = firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`), game = (await firebase.get(gameRef)).val();
+      if (game?.status !== "running" || game?.timer?.status !== "running") throw new Error("Der Timer läuft nicht.");
+      const remainingMs = challengeTimerRemaining(game.timer);
+      await firebase.update(gameRef, { phase: "paused", timer: { ...game.timer, status: "paused", remainingMs, endsAt: 0 }, updatedAt: firebase.serverTimestamp() });
+    },
+    async resetGameChallengeTimer() {
+      const gameRef = firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`), game = (await firebase.get(gameRef)).val();
+      if (game?.status !== "running") throw new Error("Game Challenges laufen nicht.");
+      await firebase.update(gameRef, { phase: "ready", timer: emptyChallengeTimer(), updatedAt: firebase.serverTimestamp() });
+    },
+    async endGameChallengeRound() {
+      const gameRef = firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`), game = (await firebase.get(gameRef)).val();
+      if (game?.status !== "running") throw new Error("Game Challenges laufen nicht.");
+      await firebase.update(gameRef, { phase: "results", timer: { ...emptyChallengeTimer(), status: "finished", remainingMs: 0 }, updatedAt: firebase.serverTimestamp() });
+    },
+    async saveGameChallengeRound(roundNumber, entries) {
+      const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`)), firebase.get(firebase.ref(firebase.db, "gameChallengesAdmin"))]);
+      let game = gameSnapshot.val(); const admin = applyChallengeRoundEntries(adminSnapshot.val(), roundNumber, entries);
+      if (game?.roundPublished?.[`round-${roundNumber}`]) game = { ...game, publicRounds: { ...(game.publicRounds || {}), [`round-${roundNumber}`]: buildChallengePublicRound(roundNumber, admin) } };
+      if (game?.estimateRevealed) game = { ...game, publicEstimate: buildPublicEstimate(admin) };
+      if (game?.status === "completed") game = calculateGameChallenges(game, admin);
+      await firebase.update(firebase.ref(firebase.db), { gameChallengesAdmin: admin, [`games/${GAME_CHALLENGES.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async publishGameChallengeRound(roundNumber) {
+      const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`)), firebase.get(firebase.ref(firebase.db, "gameChallengesAdmin"))]);
+      const game = gameSnapshot.val(); if (game?.status !== "running" && game?.status !== "completed") throw new Error("Game Challenges sind nicht gestartet.");
+      const publicRound = buildChallengePublicRound(roundNumber, adminSnapshot.val());
+      const updates = { [`games/${GAME_CHALLENGES.id}/roundPublished/round-${roundNumber}`]: true, [`games/${GAME_CHALLENGES.id}/publicRounds/round-${roundNumber}`]: publicRound, [`games/${GAME_CHALLENGES.id}/updatedAt`]: firebase.serverTimestamp(), "settings/updatedAt": firebase.serverTimestamp() };
+      if (Number(game.currentRound) === Number(roundNumber)) updates[`games/${GAME_CHALLENGES.id}/phase`] = "published";
+      await firebase.update(firebase.ref(firebase.db), updates);
+    },
+    async nextGameChallengeRound() {
+      const gameRef = firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`), game = (await firebase.get(gameRef)).val(), current = Number(game?.currentRound || 0);
+      if (game?.status !== "running" || current >= GAME_CHALLENGES.roundCount) throw new Error("Keine weitere Runde verfügbar.");
+      if (!game.roundPublished?.[`round-${current}`]) throw new Error("Bitte zuerst die aktuelle Runde veröffentlichen.");
+      await firebase.update(gameRef, { currentRound: current + 1, phase: "ready", timer: emptyChallengeTimer(), updatedAt: firebase.serverTimestamp() });
+    },
+    async saveGameChallengeEstimateQuestion(questionId, question) {
+      const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`)), firebase.get(firebase.ref(firebase.db, "gameChallengesAdmin"))]);
+      let game = gameSnapshot.val(), admin = normaliseGameChallengesAdmin(adminSnapshot.val());
+      admin.estimateQuestions[questionId] = cleanEstimateQuestion(questionId, { ...admin.estimateQuestions[questionId], ...question, estimates: admin.estimateQuestions[questionId]?.estimates || {} }); admin.updatedAt = Date.now();
+      if (game?.estimateRevealed) game = { ...game, publicEstimate: buildPublicEstimate(admin) };
+      if (game?.status === "completed") game = calculateGameChallenges(game, admin);
+      await firebase.update(firebase.ref(firebase.db), { gameChallengesAdmin: admin, [`games/${GAME_CHALLENGES.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async revealGameChallengeEstimate() {
+      const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`)), firebase.get(firebase.ref(firebase.db, "gameChallengesAdmin"))]);
+      const game = gameSnapshot.val();
+      for (let round = 1; round <= GAME_CHALLENGES.roundCount; round += 1) if (!game?.roundPublished?.[`round-${round}`]) throw new Error("Die Schätz-Challenge darf erst nach allen fünf Runden aufgelöst werden.");
+      await firebase.update(firebase.ref(firebase.db), { [`games/${GAME_CHALLENGES.id}/estimateRevealed`]: true, [`games/${GAME_CHALLENGES.id}/publicEstimate`]: buildPublicEstimate(adminSnapshot.val()), [`games/${GAME_CHALLENGES.id}/updatedAt`]: firebase.serverTimestamp() });
+    },
+    async finishGameChallenges() {
+      const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`)), firebase.get(firebase.ref(firebase.db, "gameChallengesAdmin"))]);
+      const game = calculateGameChallenges(gameSnapshot.val(), adminSnapshot.val());
+      await firebase.update(firebase.ref(firebase.db), { [`games/${GAME_CHALLENGES.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async resetGameChallenges() {
+      const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`)), firebase.get(firebase.ref(firebase.db, "gameChallengesAdmin"))]);
+      await firebase.update(firebase.ref(firebase.db), { [`games/${GAME_CHALLENGES.id}`]: buildGameChallenges("not-started", gameSnapshot.val()), gameChallengesAdmin: resetGameChallengesAdmin(adminSnapshot.val()), "settings/updatedAt": firebase.serverTimestamp() });
+    },
     deleteGame: id => firebase.remove(firebase.ref(firebase.db, `games/${id}`)),
     setMode: mode => firebase.update(firebase.ref(firebase.db, "settings"), { mode, updatedAt: firebase.serverTimestamp() }),
     async saveHuntTarget(targetId, target) {
@@ -452,6 +526,7 @@ function localStore() {
     subscribeNovitiusAdmin(callback) { const listener = state => callback(normaliseNovitiusAdmin(state.novitiusAdmin)); listeners.add(listener); callback(normaliseNovitiusAdmin(read().novitiusAdmin)); return () => listeners.delete(listener); },
     subscribeNovitiusParticipants(callback) { const listener = state => callback(state.novitiusParticipants || {}); listeners.add(listener); callback(read().novitiusParticipants || {}); return () => listeners.delete(listener); },
     subscribeNovitiusAnswers(callback) { const listener = state => callback(state.novitiusAnswers || {}); listeners.add(listener); callback(read().novitiusAnswers || {}); return () => listeners.delete(listener); },
+    subscribeGameChallengesAdmin(callback) { const listener = state => callback(normaliseGameChallengesAdmin(state.gameChallengesAdmin)); listeners.add(listener); callback(normaliseGameChallengesAdmin(read().gameChallengesAdmin)); return () => listeners.delete(listener); },
     subscribeHuntAdmin(callback) { const listener = state => callback({ targets: normaliseHuntTargets(state.huntAdmin?.targets) }); listeners.add(listener); listener(read()); return () => listeners.delete(listener); },
     async subscribeSongBattleTeam(teamId, callback) { const listener = state => { const participant = state.songBattleParticipants?.[teamId] || null; callback({ answers: state.songBattleAnswers?.[teamId] || {}, participant, owned: participant?.claimantId === getLocalProfileId() }); }; listeners.add(listener); listener(read()); return () => listeners.delete(listener); },
     async subscribeNovitiusPlayer(callback) { const participantId = getLocalProfileId(); const listener = state => callback({ participantId, participant: state.novitiusParticipants?.[participantId] || null, answers: state.novitiusAnswers?.[participantId] || {} }); listeners.add(listener); listener(read()); return () => listeners.delete(listener); },
@@ -483,6 +558,18 @@ function localStore() {
     async saveNovitiusTieBreak(tieBreak) { const state = read(); state.games[NOVITIUS_GAME.id].tieBreak = { question: String(tieBreak.question || "").trim().slice(0, 180), correctValue: Number(tieBreak.correctValue), answers: tieBreak.answers, ranking: buildTieBreakRanking(tieBreak), resolvedAt: Date.now() }; write(state); },
     async finishNovitiusGame() { const state = read(); state.games[NOVITIUS_GAME.id] = finalizeNovitiusGame(state.games[NOVITIUS_GAME.id], normaliseNovitiusAdmin(state.novitiusAdmin).questions, state.novitiusParticipants, state.novitiusAnswers); state.settings.updatedAt = Date.now(); write(state); },
     async resetNovitiusGame() { const state = read(); state.games[NOVITIUS_GAME.id] = buildNovitiusGame("not-started", state.games[NOVITIUS_GAME.id]); state.novitiusParticipants = {}; state.novitiusAnswers = {}; state.novitiusSubmissions = {}; state.novitiusAdmin.liveResult = null; state.novitiusAdmin.questions["question-10"].correctValue = ""; state.settings.updatedAt = Date.now(); write(state); },
+    async startGameChallenges() { const state = read(); state.games[GAME_CHALLENGES.id] = buildGameChallenges("running"); state.gameChallengesAdmin = resetGameChallengesAdmin(state.gameChallengesAdmin); state.settings.updatedAt = Date.now(); write(state); },
+    async startGameChallengeTimer() { const state = read(), game = state.games[GAME_CHALLENGES.id]; if (game?.status !== "running") throw new Error("Game Challenges laufen nicht."); const remainingMs = game.timer?.status === "idle" ? GAME_CHALLENGES.durationSeconds * 1000 : challengeTimerRemaining(game.timer), now = Date.now(); if (remainingMs <= 0) throw new Error("Die Zeit ist abgelaufen. Bitte die Runde beenden oder den Timer zurücksetzen."); game.phase = "running"; game.timer = { status: "running", durationMs: GAME_CHALLENGES.durationSeconds * 1000, remainingMs, startedAt: now, endsAt: now + remainingMs }; game.updatedAt = now; write(state); },
+    async pauseGameChallengeTimer() { const state = read(), game = state.games[GAME_CHALLENGES.id]; if (game?.status !== "running" || game.timer?.status !== "running") throw new Error("Der Timer läuft nicht."); game.timer = { ...game.timer, status: "paused", remainingMs: challengeTimerRemaining(game.timer), endsAt: 0 }; game.phase = "paused"; game.updatedAt = Date.now(); write(state); },
+    async resetGameChallengeTimer() { const state = read(), game = state.games[GAME_CHALLENGES.id]; if (game?.status !== "running") throw new Error("Game Challenges laufen nicht."); game.phase = "ready"; game.timer = emptyChallengeTimer(); game.updatedAt = Date.now(); write(state); },
+    async endGameChallengeRound() { const state = read(), game = state.games[GAME_CHALLENGES.id]; if (game?.status !== "running") throw new Error("Game Challenges laufen nicht."); game.phase = "results"; game.timer = { ...emptyChallengeTimer(), status: "finished", remainingMs: 0 }; game.updatedAt = Date.now(); write(state); },
+    async saveGameChallengeRound(roundNumber, entries) { const state = read(); let game = state.games[GAME_CHALLENGES.id]; state.gameChallengesAdmin = applyChallengeRoundEntries(state.gameChallengesAdmin, roundNumber, entries); if (game?.roundPublished?.[`round-${roundNumber}`]) (game.publicRounds ||= {})[`round-${roundNumber}`] = buildChallengePublicRound(roundNumber, state.gameChallengesAdmin); if (game?.estimateRevealed) game.publicEstimate = buildPublicEstimate(state.gameChallengesAdmin); if (game?.status === "completed") state.games[GAME_CHALLENGES.id] = calculateGameChallenges(game, state.gameChallengesAdmin); state.settings.updatedAt = Date.now(); write(state); },
+    async publishGameChallengeRound(roundNumber) { const state = read(), game = state.games[GAME_CHALLENGES.id]; if (game?.status !== "running" && game?.status !== "completed") throw new Error("Game Challenges sind nicht gestartet."); (game.roundPublished ||= {})[`round-${roundNumber}`] = true; (game.publicRounds ||= {})[`round-${roundNumber}`] = buildChallengePublicRound(roundNumber, state.gameChallengesAdmin); if (Number(game.currentRound) === Number(roundNumber)) game.phase = "published"; game.updatedAt = Date.now(); write(state); },
+    async nextGameChallengeRound() { const state = read(), game = state.games[GAME_CHALLENGES.id], current = Number(game?.currentRound || 0); if (game?.status !== "running" || current >= GAME_CHALLENGES.roundCount) throw new Error("Keine weitere Runde verfügbar."); if (!game.roundPublished?.[`round-${current}`]) throw new Error("Bitte zuerst die aktuelle Runde veröffentlichen."); game.currentRound = current + 1; game.phase = "ready"; game.timer = emptyChallengeTimer(); game.updatedAt = Date.now(); write(state); },
+    async saveGameChallengeEstimateQuestion(questionId, question) { const state = read(); let game = state.games[GAME_CHALLENGES.id], admin = state.gameChallengesAdmin = normaliseGameChallengesAdmin(state.gameChallengesAdmin); admin.estimateQuestions[questionId] = cleanEstimateQuestion(questionId, { ...admin.estimateQuestions[questionId], ...question, estimates: admin.estimateQuestions[questionId]?.estimates || {} }); admin.updatedAt = Date.now(); if (game?.estimateRevealed) game.publicEstimate = buildPublicEstimate(admin); if (game?.status === "completed") state.games[GAME_CHALLENGES.id] = calculateGameChallenges(game, admin); write(state); },
+    async revealGameChallengeEstimate() { const state = read(), game = state.games[GAME_CHALLENGES.id]; for (let round = 1; round <= GAME_CHALLENGES.roundCount; round += 1) if (!game?.roundPublished?.[`round-${round}`]) throw new Error("Die Schätz-Challenge darf erst nach allen fünf Runden aufgelöst werden."); game.estimateRevealed = true; game.publicEstimate = buildPublicEstimate(state.gameChallengesAdmin); game.updatedAt = Date.now(); write(state); },
+    async finishGameChallenges() { const state = read(); state.games[GAME_CHALLENGES.id] = calculateGameChallenges(state.games[GAME_CHALLENGES.id], state.gameChallengesAdmin); state.settings.updatedAt = Date.now(); write(state); },
+    async resetGameChallenges() { const state = read(); state.games[GAME_CHALLENGES.id] = buildGameChallenges("not-started", state.games[GAME_CHALLENGES.id]); state.gameChallengesAdmin = resetGameChallengesAdmin(state.gameChallengesAdmin); state.settings.updatedAt = Date.now(); write(state); },
     async deleteGame(id) { const state = read(); delete state.games[id]; state.settings.updatedAt = Date.now(); write(state); },
     async setMode(mode) { const state = read(); state.settings = { ...state.settings, mode, updatedAt: Date.now() }; write(state); },
     async saveHuntTarget(targetId, target) { const state = read(); state.huntAdmin ||= { targets: {} }; state.huntAdmin.targets = normaliseHuntTargets(state.huntAdmin.targets); state.huntAdmin.targets[targetId] = cleanHuntTarget(targetId, target); write(state); },
@@ -546,10 +633,35 @@ function normalise(value) {
     novitiusAnswers: value?.novitiusAnswers || {},
     novitiusSubmissions: value?.novitiusSubmissions || {},
     novitiusAdmin: normaliseNovitiusAdmin(value?.novitiusAdmin),
+    gameChallengesAdmin: normaliseGameChallengesAdmin(value?.gameChallengesAdmin),
     huntAdmin: { targets: normaliseHuntTargets(value?.huntAdmin?.targets) },
     oracleAnswers: value?.oracleAnswers || {},
     oracleQuestions: value?.oracleQuestions || {}
   };
+}
+
+function resetGameChallengesAdmin(value = null) {
+  const admin = normaliseGameChallengesAdmin(value);
+  admin.results = {};
+  Object.values(admin.estimateQuestions).forEach(question => { question.estimates = {}; });
+  admin.updatedAt = Date.now();
+  return admin;
+}
+
+function applyChallengeRoundEntries(value, roundNumber, entries = {}) {
+  const admin = normaliseGameChallengesAdmin(value), assignments = GAME_CHALLENGE_ROTATIONS[`round-${Number(roundNumber)}`];
+  if (!assignments) throw new Error("Ungültige Runde.");
+  const activeQuestions = challengeEstimateQuestions(admin);
+  TEAMS.forEach(team => {
+    const stationId = assignments[team.id], entry = entries[team.id] || {};
+    if (stationId === "estimate") {
+      activeQuestions.forEach(question => { question.estimates[team.id] = cleanEstimateValue(entry.estimates?.[question.id]); });
+    } else {
+      ((admin.results[stationId] ||= {}))[team.id] = cleanChallengeResult(stationId, entry.value);
+    }
+  });
+  admin.updatedAt = Date.now();
+  return admin;
 }
 
 function cleanHuntTarget(targetId, target) {

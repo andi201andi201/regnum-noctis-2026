@@ -51,6 +51,8 @@ Der Workflow in `.github/workflows/pages.yml` veröffentlicht `main` automatisch
 - `novitiusAnswers/{uid}/question-{nr}`: genau eine geschützte Antwort pro Person und Frage; nach der Auflösung inklusive 3/2/1/0-Punkten
 - `novitiusSubmissions/question-{nr}/{uid}`: öffentlicher Abgabemarker ohne Antwortinhalt für Live-Zähler und TV
 - `novitiusAdmin/questions`: geschützter Fragenkatalog mit Lösungen und drei Toleranzbereichen
+- `games/game-challenges`: öffentlicher Status, Timer, Rotation, freigegebene Runden und Endwertung der fünf Stationen
+- `gameChallengesAdmin`: geschützte Rohresultate, Schätzfragen, Lösungen und Schätzungen aller Reiche
 - `settings/hunt`: öffentlicher Nachtjagd-Status und die für die laufende Runde eingefrorenen Hinweise
 - `huntAdmin/targets`: geschützte Bearbeitung der internen Namen, KI-Erkennungsziele und Hinweise
 - `games/hunt-{runde}-{reich}-{gegenstand}`: atomarer, eindeutig adressierter Fund mit genau einem Tagespunkt
@@ -109,6 +111,30 @@ Korrektur ersetzt denselben Spieleintrag und erzeugt keine doppelten Punkte.
 
 Die TV-Ansicht zeigt während einer offenen Frage nur Frage und Abgabezahl. Nach
 der bewussten Auflösung erscheinen richtige Antwort und aktuelle Teamrangliste.
+
+## Game Challenges
+
+Das Spiel läuft unter `games/game-challenges`. In fünf fixen Rotationsrunden
+absolviert jedes Reich genau einmal Cup Tower, Pingpong, Darts, Gummiband Cups
+und die Schätz-Challenge. Der gemeinsame Vier-Minuten-Timer wird über einen
+Zeitstempel synchronisiert, kann pausiert oder zurückgesetzt werden und zeigt
+auf der TV-Ansicht nach Ablauf gross **WECHSEL**. Auf dem Handy sieht jedes Reich
+nur seine aktuelle Station, die Anleitung und den Timer.
+
+Die Spielleitung erfasst sämtliche Resultate pro Runde. Erst der bewusste Button
+zum Veröffentlichen schreibt eine kontrollierte öffentliche Kopie. Bei der
+Schätzstation enthält diese Kopie bis zur separaten Auflösung nur den
+Abgabestatus. Die eigentlichen Schätzungen und Lösungen liegen geschützt unter
+`gameChallengesAdmin`. Jede Schätzfrage wird wegen unterschiedlicher Einheiten
+separat nach prozentualer Abweichung rangiert und vergibt faire Unterpunkte; aus
+deren Summe entsteht die Stationsrangliste.
+
+Jede Station vergibt 5 / 4 / 3 / 2 / 1 interne Punkte. Gleiche Resultate teilen
+sich Rang und Punkte, der Folgerang wird übersprungen. In der Gesamtwertung
+entscheidet nach der Summe zuerst die Zahl gewonnener Stationen; bleibt der
+Gleichstand bestehen, teilen sich die Reiche Rang und Tagespunkte. Der Abschluss
+überschreibt immer denselben Spieleintrag. Spätere Korrekturen berechnen damit
+Stationsrang, Gesamtwertung und Tagespunkte neu, ohne Punkte doppelt zu zählen.
 
 ## Nachtjagd
 

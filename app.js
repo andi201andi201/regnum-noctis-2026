@@ -1,6 +1,7 @@
-import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=novitius-2";
-import { getStore } from "./store.js?v=novitius-2";
+import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=challenges-1";
+import { getStore } from "./store.js?v=challenges-1";
 import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js";
+import { GAME_CHALLENGES } from "./challenges-data.js?v=challenges-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -16,6 +17,7 @@ window.addEventListener("regnum-player-changed", () => {
   if (currentState?.settings?.mode === "live") {
     maybeCelebrateGameWinner(currentState.games?.[SONG_BATTLE.id], SONG_BATTLE.id);
     maybeCelebrateGameWinner(currentState.games?.[NOVITIUS_GAME.id], NOVITIUS_GAME.id);
+    maybeCelebrateGameWinner(currentState.games?.[GAME_CHALLENGES.id], GAME_CHALLENGES.id);
   }
 });
 $("#victoryCelebration").addEventListener("click", hideVictoryCelebration);
@@ -121,6 +123,8 @@ function render(state) {
   renderSongBattle(state.games[SONG_BATTLE.id]);
   const novitiusGame = state.games[NOVITIUS_GAME.id];
   if (novitiusGame?.status === "completed") maybeCelebrateGameWinner(novitiusGame, NOVITIUS_GAME.id);
+  const challengesGame = state.games[GAME_CHALLENGES.id];
+  if (challengesGame?.status === "completed") maybeCelebrateGameWinner(challengesGame, GAME_CHALLENGES.id);
 
   $("#leaderboard").innerHTML = ranking.map((team, index) => `
     <li class="rank-card ${index === 0 && hasResults ? "leader" : ""}" style="--team:${team.color};--glow:${team.glow}">
@@ -223,6 +227,12 @@ function renderGameResult(game) {
       const team = TEAMS.find(item => item.id === teamId);
       const place = Number(game.placements?.[teamId] || index + 1);
       return `<li style="--team:${team?.color || "#888"}"><b>${place}. ${place === 1 ? "🏆 " : ""}${team?.marker || ""} ${escapeHtml(team?.name || teamId)}</b><span>Ø ${formatAverage(game.internalPoints?.[teamId])}/30 · +${Number(game.points?.[teamId] || 0)}</span></li>`;
+    }).join("")}</ol></div></article>`;
+  }
+  if (game.id === GAME_CHALLENGES.id && game.status === "completed") {
+    return `<article class="result-row song-public-result challenge-public-result"><div class="result-title"><span>${formatTime(game.createdAt, true)}</span><strong>🏆 GAME CHALLENGES – RESULTAT</strong><small>5 Stationen · Gleichstände teilen sich den Platz</small><ol>${(game.ranking || []).map((teamId, index) => {
+      const team = TEAMS.find(item => item.id === teamId), place = Number(game.placements?.[teamId] || index + 1);
+      return `<li style="--team:${team?.color || "#888"}"><b>${place}. ${place === 1 ? "🏆 " : ""}${team?.marker || ""} ${escapeHtml(team?.name || teamId)}</b><span>${Number(game.internalPoints?.[teamId] || 0)}/25 · ${Number(game.stationWins?.[teamId] || 0)} Siege · +${Number(game.points?.[teamId] || 0)}</span></li>`;
     }).join("")}</ol></div></article>`;
   }
   return `<article class="result-row"><div class="result-title"><span>${formatTime(game.createdAt, true)}</span><strong>${escapeHtml(game.name)}</strong><small>${escapeHtml([game.round, game.resultText].filter(Boolean).join(" · "))}</small></div><div class="point-chips">${pointChips(game.points)}</div></article>`;

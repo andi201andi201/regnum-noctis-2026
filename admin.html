@@ -5,7 +5,7 @@
   <meta name="theme-color" content="#08090d"><title>Admin · Regnum Noctis</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=novitius-2">
+  <link rel="stylesheet" href="styles.css?v=challenges-1">
 </head>
 <body class="admin-page">
   <div class="stars" aria-hidden="true"></div>
@@ -86,6 +86,28 @@
         </div>
       </section>
 
+      <section id="gameChallengesAdminPanel" class="panel challenge-admin-panel">
+        <div class="panel-title"><div><p class="eyebrow">5 Stationen · 5 × 4 Minuten</p><h2>🏆 Game Challenges</h2></div><span id="gameChallengesAdminStatus" class="save-message">Noch nicht gestartet</span></div>
+        <p class="save-message">Alle Reiche rotieren gleichzeitig. Resultate werden pro Runde gespeichert und erst nach eurer Freigabe veröffentlicht.</p>
+        <div class="hunt-admin-actions"><button id="startGameChallenges" class="primary-button" type="button">Game Challenges starten</button><button id="resetGameChallenges" class="text-button hidden" type="button">Zurücksetzen</button><a class="secondary-button" href="display.html" target="_blank">TV-Ansicht öffnen</a></div>
+
+        <div id="gameChallengesControls" class="hidden">
+          <div class="challenge-control-grid">
+            <div class="challenge-timer-admin"><p class="eyebrow" id="challengeCurrentRound">Runde 1 von 5</p><strong id="challengeTimer">04:00</strong><div class="hunt-admin-actions"><button id="startChallengeTimer" class="primary-button" type="button">Timer starten</button><button id="pauseChallengeTimer" class="secondary-button" type="button">Pause</button><button id="resetChallengeTimer" class="secondary-button" type="button">Timer zurücksetzen</button><button id="endChallengeRound" class="secondary-button" type="button">Runde beenden</button></div></div>
+            <div><p class="eyebrow">Aktuelle Rotation</p><div id="challengeRotation" class="challenge-rotation"></div></div>
+          </div>
+
+          <div class="challenge-results-admin">
+            <div class="panel-title"><div><p class="eyebrow">Resultate</p><h3>Runde erfassen und freigeben</h3></div><label>Runde<select id="challengeReviewRound"></select></label></div>
+            <form id="challengeRoundForm"><div id="challengeRoundInputs" class="challenge-round-inputs"></div><div class="hunt-admin-actions"><button id="saveChallengeRound" class="secondary-button" type="submit">Resultate speichern</button><button id="publishChallengeRound" class="primary-button" type="button">Runde veröffentlichen</button><button id="nextChallengeRound" class="secondary-button" type="button">Nächste Runde</button></div><p id="challengeRoundMessage" class="form-error"></p></form>
+          </div>
+
+          <div class="challenge-estimate-admin"><div class="panel-title"><div><p class="eyebrow">Station 5</p><h3>Schätz-Challenge vorbereiten</h3></div><button id="revealChallengeEstimate" class="primary-button" type="button">Schätzungen auflösen</button></div><p id="challengeEstimateRevealHelp" class="save-message">Die Lösungen und Schätzungen werden erst nach allen fünf veröffentlichten Runden sichtbar.</p><div id="challengeEstimateEditors" class="challenge-estimate-editors"></div></div>
+
+          <div id="challengeFinalisation" class="song-finalisation hidden"><div class="panel-title"><div><p class="eyebrow">Gesamtauswertung</p><h3>Interne Stationspunkte</h3></div></div><div id="challengeFinalRanking" class="song-final-ranking"></div><button id="finishGameChallenges" class="primary-button" type="button">Spiel abschliessen · Tagespunkte vergeben</button><p id="challengeFinishMessage" class="form-error"></p></div>
+        </div>
+      </section>
+
       <section id="huntAdminPanel" class="panel hunt-control-panel">
         <div class="panel-title"><div><p class="eyebrow">Ganztägige Challenge</p><h2>🌙 Nachtjagd</h2></div><span id="huntAdminStatus" class="save-message">Noch nicht gestartet</span></div>
         <p class="save-message">Jeder Gegenstand bringt jedem Reich einmalig +1 Tagespunkt. Die Jagd läuft bis zum manuellen Stopp.</p>
@@ -125,6 +147,6 @@
     </div>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="admin.js?v=novitius-2"></script>
+  <script type="module" src="admin.js?v=challenges-1"></script>
 </body>
 </html>
