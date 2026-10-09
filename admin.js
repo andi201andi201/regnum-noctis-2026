@@ -1,7 +1,7 @@
-import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=challenges-2";
-import { getStore } from "./store.js?v=challenges-2";
-import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=challenges-2";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, CHALLENGE_STATIONS, normaliseGameChallengesAdmin, challengeEstimateQuestions, stationById, challengeTimerRemaining, calculateGameChallenges } from "./challenges-data.js?v=challenges-2";
+import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=challenges-3";
+import { getStore } from "./store.js?v=challenges-3";
+import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=challenges-3";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, CHALLENGE_STATIONS, normaliseGameChallengesAdmin, challengeEstimateQuestions, stationById, challengeTimerRemaining, calculateGameChallenges } from "./challenges-data.js?v=challenges-3";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -18,8 +18,10 @@ $("#startSongBattle").addEventListener("click", async () => {
   await withDisabled($("#startSongBattle"), async () => { await store.startSongBattle(); toast("Song Battle läuft · Song 1 ist offen"); });
 });
 $("#resetSongBattle").addEventListener("click", async () => {
-  if (!confirm("Song Battle vollständig zurücksetzen? Antworten, Bewertungen und Gesamtpunkte dieses Spiels werden entfernt.")) return;
-  await withDisabled($("#resetSongBattle"), async () => { await store.resetSongBattle(); songReviewNumber = 1; toast("Song Battle zurückgesetzt"); });
+  const running = currentState?.games?.[SONG_BATTLE.id]?.status === "running";
+  const message = running ? "Song Battle abbrechen? Das Spiel verschwindet sofort von den Handys. Alle bisherigen Antworten und Bewertungen werden gelöscht." : "Song Battle vollständig zurücksetzen? Antworten, Bewertungen und Gesamtpunkte dieses Spiels werden entfernt.";
+  if (!confirm(message)) return;
+  await withDisabled($("#resetSongBattle"), async () => { await store.resetSongBattle(); songReviewNumber = 1; toast(running ? "Song Battle abgebrochen" : "Song Battle zurückgesetzt"); });
 });
 $("#activateSongRound").addEventListener("click", () => activateSongRound(Number($("#songRoundSelect").value)));
 $("#nextSongRound").addEventListener("click", () => {
@@ -75,8 +77,10 @@ $("#startNovitius").addEventListener("click", async () => {
   await withDisabled($("#startNovitius"), async () => { await store.startNovitiusGame(); toast("Anmeldung geöffnet"); });
 });
 $("#resetNovitius").addEventListener("click", async () => {
-  if (!confirm("Spiel vollständig zurücksetzen? Teilnehmende, Antworten und Spielpunkte werden gelöscht. Die vorbereiteten Fragen bleiben erhalten.")) return;
-  await withDisabled($("#resetNovitius"), async () => { await store.resetNovitiusGame(); novitiusReviewNumber = 1; toast("Novitius-Spiel zurückgesetzt"); });
+  const running = currentState?.games?.[NOVITIUS_GAME.id]?.status === "running";
+  const message = running ? "Novitius-Spiel abbrechen? Das Spiel verschwindet sofort von den Handys. Anmeldungen und Antworten werden gelöscht; die vorbereiteten Fragen bleiben erhalten." : "Spiel vollständig zurücksetzen? Teilnehmende, Antworten und Spielpunkte werden gelöscht. Die vorbereiteten Fragen bleiben erhalten.";
+  if (!confirm(message)) return;
+  await withDisabled($("#resetNovitius"), async () => { await store.resetNovitiusGame(); novitiusReviewNumber = 1; toast(running ? "Novitius-Spiel abgebrochen" : "Novitius-Spiel zurückgesetzt"); });
 });
 $("#openNovitiusRegistration").addEventListener("click", async () => { try { await store.setNovitiusRegistration(true); toast("Anmeldung offen"); } catch (error) { toast(error.message); } });
 $("#closeNovitiusRegistration").addEventListener("click", async () => { try { await store.setNovitiusRegistration(false); toast("Teilnehmerliste und Teamgrössen fixiert"); } catch (error) { toast(error.message); } });
@@ -138,7 +142,7 @@ $("#novitiusQuestionForm").addEventListener("submit", async event => {
 
 $("#challengeReviewRound").innerHTML = Array.from({ length: GAME_CHALLENGES.roundCount }, (_, index) => `<option value="${index + 1}">Runde ${index + 1}</option>`).join("");
 $("#startGameChallenges").addEventListener("click", async () => { if (!confirm("Game Challenges mit Runde 1 starten? Bisherige Game-Challenges-Resultate werden ersetzt.")) return; await withDisabled($("#startGameChallenges"), async () => { await store.startGameChallenges(); challengeReviewRound = 1; toast("Game Challenges gestartet"); }); });
-$("#resetGameChallenges").addEventListener("click", async () => { if (!confirm("Game Challenges vollständig zurücksetzen? Resultate und Tagespunkte dieses Spiels werden entfernt.")) return; await withDisabled($("#resetGameChallenges"), async () => { await store.resetGameChallenges(); challengeReviewRound = 1; toast("Game Challenges zurückgesetzt"); }); });
+$("#resetGameChallenges").addEventListener("click", async () => { const running = currentState?.games?.[GAME_CHALLENGES.id]?.status === "running"; const message = running ? "Game Challenges abbrechen? Das Spiel verschwindet sofort von den Handys und der TV-Ansicht. Alle bereits erfassten Rundenresultate werden gelöscht; die Schätzfragen bleiben erhalten." : "Game Challenges vollständig zurücksetzen? Resultate und Tagespunkte dieses Spiels werden entfernt."; if (!confirm(message)) return; await withDisabled($("#resetGameChallenges"), async () => { await store.resetGameChallenges(); challengeReviewRound = 1; toast(running ? "Game Challenges abgebrochen" : "Game Challenges zurückgesetzt"); }); });
 $("#startChallengeTimer").addEventListener("click", async () => { try { await store.startGameChallengeTimer(); } catch (error) { toast(error.message); } });
 $("#pauseChallengeTimer").addEventListener("click", async () => { try { await store.pauseGameChallengeTimer(); } catch (error) { toast(error.message); } });
 $("#resetChallengeTimer").addEventListener("click", async () => { try { await store.resetGameChallengeTimer(); } catch (error) { toast(error.message); } });
@@ -256,6 +260,8 @@ function renderGameChallengesAdmin(state) {
   $("#gameChallengesAdminStatus").textContent = GAME_STATUSES[status] || GAME_STATUSES["not-started"];
   $("#startGameChallenges").classList.toggle("hidden", status !== "not-started");
   $("#resetGameChallenges").classList.toggle("hidden", status === "not-started");
+  $("#resetGameChallenges").classList.toggle("abort-action", running);
+  $("#resetGameChallenges").textContent = running ? "Spiel abbrechen" : "Zurücksetzen";
   $("#gameChallengesControls").classList.toggle("hidden", status === "not-started");
   if (status === "not-started") return;
   const round = Number(game.currentRound || 1), timerStatus = game.timer?.status || "idle";
@@ -337,6 +343,8 @@ function renderSongBattleAdmin(state) {
   $("#songBattleAdminStatus").textContent = GAME_STATUSES[status] || GAME_STATUSES["not-started"];
   $("#startSongBattle").classList.toggle("hidden", status !== "not-started");
   $("#resetSongBattle").classList.toggle("hidden", status === "not-started");
+  $("#resetSongBattle").classList.toggle("abort-action", running);
+  $("#resetSongBattle").textContent = running ? "Spiel abbrechen" : "Zurücksetzen";
   $("#songBattleControls").classList.toggle("hidden", status === "not-started");
   if (status === "not-started") return;
 
@@ -422,6 +430,8 @@ function renderNovitiusAdmin(state) {
   $("#novitiusAdminStatus").textContent = GAME_STATUSES[status] || GAME_STATUSES["not-started"];
   $("#startNovitius").classList.toggle("hidden", status !== "not-started");
   $("#resetNovitius").classList.toggle("hidden", status === "not-started");
+  $("#resetNovitius").classList.toggle("abort-action", running);
+  $("#resetNovitius").textContent = running ? "Spiel abbrechen" : "Zurücksetzen";
   $("#novitiusControls").classList.toggle("hidden", status === "not-started");
   renderNovitiusQuestionList();
   if (status === "not-started") return;

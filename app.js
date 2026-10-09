@@ -1,7 +1,7 @@
-import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=challenges-2";
-import { getStore } from "./store.js?v=challenges-2";
+import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=challenges-3";
+import { getStore } from "./store.js?v=challenges-3";
 import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js";
-import { GAME_CHALLENGES } from "./challenges-data.js?v=challenges-2";
+import { GAME_CHALLENGES } from "./challenges-data.js?v=challenges-3";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();

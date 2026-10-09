@@ -1,4 +1,4 @@
-import { TEAMS } from "./data.js?v=challenges-2";
+import { TEAMS } from "./data.js?v=challenges-3";
 
 export const GAME_CHALLENGES = {
   id: "game-challenges",

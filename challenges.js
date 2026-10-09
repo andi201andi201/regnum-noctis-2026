@@ -1,6 +1,6 @@
-import { TEAMS } from "./data.js?v=challenges-2";
-import { getStore } from "./store.js?v=challenges-2";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, stationById, challengeTimerRemaining } from "./challenges-data.js?v=challenges-2";
+import { TEAMS } from "./data.js?v=challenges-3";
+import { getStore } from "./store.js?v=challenges-3";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, stationById, challengeTimerRemaining } from "./challenges-data.js?v=challenges-3";
 import { getPlayerProfile } from "./player.js";
 
 const $ = selector => document.querySelector(selector);
