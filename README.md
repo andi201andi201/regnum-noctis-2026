@@ -123,9 +123,9 @@ wodurch auch der Tagespunkt sofort zurückgenommen wird. **Zurücksetzen** entfe
 alle Nachtjagd-Funde sowie alte Ballon- und Orakel-Spielresultate; die bearbeitete
 Gegenstandskonfiguration bleibt erhalten.
 
-Die zehn Plätze sind im ausgelieferten Code bewusst noch deaktiviert und enthalten
-keine Lösungen. Vor dem ersten Start werden Hinweis, interner Name und passende
-KI-Kategorie ausschliesslich im geschützten Adminbereich erfasst und aktiviert.
+Die zehn Gegenstände sind mit Hinweis, internem Namen und passender KI-Kategorie
+bereits aktiviert. Die Spielleitung kann die Konfiguration vor einem neuen Start
+im Adminbereich weiterhin bearbeiten oder einzelne Gegenstände deaktivieren.
 
 `display.html` ist die eigenständige Querformat-Ansicht für den grossen Bildschirm.
 Sie zeigt die Tagesrangliste, alle fünf Nachtjagd-Fortschritte und den letzten Fund,

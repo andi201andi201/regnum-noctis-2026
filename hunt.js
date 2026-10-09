@@ -10,6 +10,7 @@ const WRONG_MESSAGE_MS = 1400;
 const MODEL_URL = "https://storage.googleapis.com/mediapipe-tasks/object_detector/efficientdet_lite0_uint8.tflite";
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
 const MODULE_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs";
+const CATEGORY_NAMES = { bottle: "Flasche", cup: "Becher/Tasse", chair: "Stuhl", backpack: "Rucksack", book: "Buch", "cell phone": "Handy", toothbrush: "Zahnbürste", spoon: "Löffel", umbrella: "Regenschirm", clock: "Uhr" };
 
 let detector = null, stream = null, animationFrame = null, currentState = null, selectedTarget = null;
 let lastDetectionAt = 0, detectedSince = null, completed = false, wrongUntil = 0;
@@ -127,7 +128,7 @@ async function finishObject() {
   try {
     const claim = await store.claimHuntObject(hunt.roundId, selectedTarget, profile);
     if (!claim.awarded) return showAlreadyFound();
-    showFeedback("✓", "Richtig", "Gegenstand erkannt!", `+${HUNT_POINTS_PER_OBJECT} Punkt für ${team.name}`);
+    showFeedback("✓", "Richtig", `${CATEGORY_NAMES[selectedTarget.category] || "Gegenstand"} erkannt!`, `+${HUNT_POINTS_PER_OBJECT} Punkt für ${team.name}`);
   } catch (error) {
     showFeedback("✕", "Nicht gespeichert", "Die Nachtjagd ist beendet.", "Dieser Fund konnte nicht mehr gewertet werden.", true);
   }
