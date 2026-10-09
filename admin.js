@@ -1,6 +1,6 @@
-import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking } from "./data.js?v=hunt-2";
-import { getStore } from "./store.js?v=hunt-2";
-import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=hunt-2";
+import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking } from "./data.js?v=hunt-3";
+import { getStore } from "./store.js?v=hunt-3";
+import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=hunt-3";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();

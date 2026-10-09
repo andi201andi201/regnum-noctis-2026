@@ -1,6 +1,6 @@
-import { TEAMS, totalsFromGames, formatTime } from "./data.js?v=hunt-2";
-import { getStore } from "./store.js?v=hunt-2";
-import { huntFinds, huntProgress } from "./hunt-data.js?v=hunt-2";
+import { TEAMS, totalsFromGames, formatTime } from "./data.js?v=hunt-3";
+import { getStore } from "./store.js?v=hunt-3";
+import { huntFinds, huntProgress } from "./hunt-data.js?v=hunt-3";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();

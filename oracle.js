@@ -1,6 +1,6 @@
-import { TEAMS } from "./data.js?v=hunt-2";
+import { TEAMS } from "./data.js?v=hunt-3";
 import { getPlayerProfile } from "./player.js";
-import { getStore } from "./store.js?v=hunt-2";
+import { getStore } from "./store.js?v=hunt-3";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
