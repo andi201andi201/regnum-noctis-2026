@@ -13,14 +13,27 @@
 .winner-crest img{width:100%;height:100%;object-fit:cover}
 @media(max-width:560px){.rank-card{grid-template-columns:23px 60px 1fr auto}.crest{width:60px;height:60px}}
 
-/* Bewegter Nachthimmel */
-body{background:radial-gradient(circle at 68% 5%,#292848 0,#12131f 24%,#08090d 62%);background-attachment:fixed}
-.stars{z-index:0;opacity:1;overflow:hidden;mask-image:none;background-image:radial-gradient(circle,#ffffffb5 0 1px,transparent 1.4px),radial-gradient(circle,#d9c37ab8 0 .8px,transparent 1.2px),radial-gradient(circle,#8ca7d9a6 0 .7px,transparent 1.1px);background-size:83px 83px,137px 137px,211px 211px;background-position:9px 17px,61px 33px,112px 79px;animation:star-drift 100s linear infinite}
-.stars::before{content:"";position:absolute;inset:-35%;background:radial-gradient(ellipse at center,rgba(174,180,222,.22) 0,rgba(113,119,166,.11) 24%,rgba(60,64,103,.04) 43%,transparent 68%);transform:rotate(-20deg) scale(.75);filter:blur(22px);animation:milky-breathe 9s ease-in-out infinite alternate}
-.stars::after{content:"";position:absolute;inset:0;background-image:radial-gradient(circle at 8% 18%,#fff 0 1.3px,transparent 2px),radial-gradient(circle at 23% 72%,#fff8d0 0 1.1px,transparent 2px),radial-gradient(circle at 41% 31%,#dce8ff 0 1.4px,transparent 2.2px),radial-gradient(circle at 63% 82%,#fff 0 1.2px,transparent 2px),radial-gradient(circle at 79% 27%,#fff4c5 0 1.5px,transparent 2.3px),radial-gradient(circle at 92% 61%,#dce8ff 0 1.1px,transparent 2px);filter:drop-shadow(0 0 4px #dce8ff);animation:star-flicker 3.8s ease-in-out infinite alternate}
-@keyframes star-drift{to{background-position:92px 100px,198px 170px,323px 290px}}
-@keyframes star-flicker{0%,18%{opacity:.3}42%{opacity:.9}61%{opacity:.45}100%{opacity:1}}
-@keyframes milky-breathe{from{opacity:.55;transform:rotate(-20deg) scale(.72)}to{opacity:1;transform:rotate(-17deg) scale(.8)}}
+/* Nachthimmel: statische Tiefe, sanftes Funkeln und seltene Sternschnuppen. */
+body{background:radial-gradient(ellipse at 74% 0,#252640 0,#111421 32%,#08090d 72%);background-attachment:fixed}
+.shell,.display-shell{z-index:1}
+.stars{z-index:0;opacity:1;overflow:hidden;mask-image:none;background-image:radial-gradient(circle at 16px 28px,#e8eeff80 0 .7px,transparent 1.3px),radial-gradient(circle at 93px 67px,#e2cc965c 0 .8px,transparent 1.4px),radial-gradient(circle at 51px 136px,#b7c9ef60 0 .6px,transparent 1.2px);background-size:173px 191px,257px 283px,113px 149px;background-position:9px 17px,61px 33px,112px 79px}
+.stars::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 82% 12%,#7373ac18,transparent 48%),radial-gradient(ellipse at 14% 54%,#75649213,transparent 46%),linear-gradient(118deg,transparent 18%,#9ca8cd08 35%,#a6b4da0e 41%,#7b8db408 48%,transparent 65%)}
+.stars::after{content:"";position:absolute;inset:0;background-image:radial-gradient(circle at 8% 18%,#e9efff 0 1px,#c5d5ff30 1.3px,transparent 4px),radial-gradient(circle at 23% 72%,#fff0cb 0 .8px,transparent 2px),radial-gradient(circle at 41% 31%,#dce8ff 0 1.1px,transparent 2.2px),radial-gradient(circle at 63% 82%,#fff 0 .9px,transparent 2px),radial-gradient(circle at 79% 27%,#ffedbd 0 1.2px,#ead5a820 1.5px,transparent 4px),radial-gradient(circle at 92% 61%,#dce8ff 0 .8px,transparent 2px);opacity:.65;animation:sky-twinkle 8s ease-in-out infinite alternate}
+.sky-planet{position:absolute;display:block;border-radius:50%;pointer-events:none}
+.sky-planet--moon{width:clamp(54px,7vw,104px);aspect-ratio:1;right:8%;top:6%;opacity:.64;background:radial-gradient(circle at 34% 32%,#292d4925 0 8%,#b5b3c31a 9%,transparent 11%),radial-gradient(circle at 54% 58%,#20273e40 0 10%,#d2c7bc16 11%,transparent 13%),radial-gradient(circle at 29% 65%,#31355335 0 5%,transparent 7%),radial-gradient(circle at 27% 27%,#d0c9be 0,#85899d 36%,#3e465f 63%,#101625 78%);box-shadow:inset -10px -7px 18px #050914a8,0 0 34px #95a3d512}
+.sky-planet--ringed{width:clamp(48px,6vw,88px);aspect-ratio:1;left:5%;top:38%;opacity:.5;transform:rotate(-18deg)}
+.sky-planet-surface{position:absolute;inset:0;z-index:1;border-radius:50%;background:linear-gradient(165deg,transparent 24%,#d1b09a24 25%,transparent 31%,#30304f50 41%,transparent 46%,#c3a58e20 55%,transparent 60%),radial-gradient(circle at 28% 24%,#a29aaf 0,#6a627e 32%,#303347 63%,#0c1322 82%);box-shadow:inset -9px -8px 16px #080c19b5,0 0 30px #b9a4cc0b}
+.sky-planet--ringed::before,.sky-planet--ringed::after{content:"";position:absolute;inset:29% -42%;border:5px solid #baa5ab55;border-radius:50%;transform:rotate(-12deg);box-shadow:0 0 0 2px #b9a5ad14,inset 0 0 0 2px #cbbba41a}
+.sky-planet--ringed::before{clip-path:inset(0 0 50% 0);z-index:0}
+.sky-planet--ringed::after{clip-path:inset(50% 0 0 0);z-index:2}
+.sky-meteor{position:absolute;left:0;top:0;display:block;width:clamp(95px,15vw,200px);height:1px;border-radius:50%;background:linear-gradient(90deg,transparent,#b5caf750 70%,#eef4ff);opacity:0;pointer-events:none;transform:translate3d(-30vw,-30vw,0) rotate(35deg);animation:sky-meteor-flight 29s linear infinite;animation-delay:4s}
+.sky-meteor::after{content:"";position:absolute;right:0;top:-1px;width:3px;height:3px;border-radius:50%;background:#eef4ff;box-shadow:0 0 7px 1px #bdd5ff80}
+.sky-meteor--two{left:28%;top:-10%;width:clamp(85px,11vw,155px);animation-duration:37s;animation-delay:16s}
+.sky-meteor--three{left:-15%;top:28%;width:clamp(100px,13vw,175px);animation-duration:43s;animation-delay:27s}
+@keyframes sky-twinkle{from{opacity:.35}to{opacity:.8}}
+@keyframes sky-meteor-flight{0%{opacity:0;transform:translate3d(-25vw,-12vw,0) rotate(35deg)}1%{opacity:.7}4%{opacity:.6}6%,100%{opacity:0;transform:translate3d(115vw,86vw,0) rotate(35deg)}}
+@media(max-width:560px){.sky-planet--moon{width:clamp(40px,13vw,52px);top:112px;right:12px;opacity:.47}.sky-planet--ringed{width:42px;left:20px;top:238px;opacity:.36}.sky-planet--ringed::before,.sky-planet--ringed::after{border-width:3px}.sky-meteor--three{display:none}}
+@media(prefers-reduced-motion:reduce){.sky-meteor{display:none}.stars::before,.stars::after{animation:none!important}.stars::after{opacity:.65}}
 .admin-lock{display:inline-grid;place-items:center;width:21px;height:21px;margin-left:6px;color:#575861!important;border:1px solid #ffffff0e;border-radius:50%;font-size:0;text-decoration:none;vertical-align:middle;transition:.2s}
 .admin-lock::before{content:"🔒";font-size:.62rem;filter:grayscale(1);opacity:.46}
 .admin-lock:hover,.admin-lock:focus-visible{border-color:#d9b66555;transform:translateY(-1px)}
