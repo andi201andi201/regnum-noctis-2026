@@ -5,7 +5,7 @@
   <meta name="theme-color" content="#08090d"><title>Admin · Regnum Noctis</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=beer-pong-2">
+  <link rel="stylesheet" href="styles.css?v=ballon-monster-1">
 </head>
 <body class="admin-page">
   <div class="stars" aria-hidden="true"></div>
@@ -18,6 +18,43 @@
 
     <div id="adminContent" class="hidden">
       <section class="panel status-panel"><div><p class="eyebrow">Sichtbarkeit</p><h2>Modus steuern</h2></div><div class="segmented" role="group" aria-label="Anzeigemodus"><button data-mode="live">Live</button><button data-mode="frozen">Einfrieren</button><button data-mode="final">Finale</button></div><p class="mode-help" id="modeHelp"></p></section>
+
+      <section id="balloonMonsterAdminPanel" class="panel balloon-admin-panel">
+        <div class="panel-title"><div><p class="eyebrow">Spiel 1 · Samstagvormittag · ca. 15 Minuten</p><h2>🎈 Ballon-Monster</h2></div><span id="balloonMonsterAdminStatus" class="save-message">Noch nicht gestartet</span></div>
+        <p class="save-message">Glücksrad → 90 Sekunden füllen → Parcours → Ballons zählen. Tagespunkte gibt es erst beim Spielabschluss.</p>
+        <div id="balloonMonsterStart" class="balloon-start-row">
+          <label>Identischer Vorrat pro Reich<input id="balloonMonsterSupply" type="number" min="1" max="999" step="1" value="30" inputmode="numeric"></label>
+          <button id="startBalloonMonster" class="primary-button" type="button">Ballon-Monster starten</button>
+        </div>
+        <div class="hunt-admin-actions"><button id="resetBalloonMonster" class="text-button hidden" type="button">Zurücksetzen</button><a class="secondary-button" href="display.html" target="_blank">Grossbildschirm öffnen</a></div>
+
+        <div id="balloonMonsterControls" class="hidden">
+          <div class="balloon-admin-overview">
+            <div><span>Verbleibende Reiche</span><strong id="balloonRemaining">5 / 5</strong></div>
+            <div><span>Aktuelles Reich</span><strong id="balloonCurrentTeam">Noch nicht ausgelost</strong></div>
+            <div><span>Phase</span><strong id="balloonCurrentPhase">Spielstart</strong></div>
+          </div>
+          <div id="balloonWheelControls" class="hunt-admin-actions"><button id="drawBalloonTeam" class="primary-button" type="button">Glücksrad drehen</button><button id="undoBalloonDraw" class="secondary-button hidden" type="button">Auslosung rückgängig</button></div>
+
+          <div id="balloonRoundControls" class="balloon-round-admin hidden">
+            <div class="balloon-admin-timer"><p class="eyebrow">90-Sekunden-Countdown</p><strong id="balloonAdminTimer">01:30</strong><span id="balloonAdminTimerState">Bereit</span></div>
+            <div class="hunt-admin-actions"><button id="startBalloonTimer" class="primary-button" type="button">Timer starten</button><button id="pauseBalloonTimer" class="secondary-button hidden" type="button">Pause</button><button id="resetBalloonTimer" class="secondary-button hidden" type="button">Timer zurücksetzen</button><button id="startBalloonCourse" class="primary-button hidden" type="button">Parcours starten</button><button id="finishBalloonCourse" class="primary-button hidden" type="button">Parcours beendet</button><button id="abortBalloonRound" class="text-button" type="button">Durchgang abbrechen</button></div>
+          </div>
+
+          <form id="balloonResultForm" class="balloon-result-form hidden">
+            <p class="eyebrow" id="balloonResultTeam">Resultat</p>
+            <label>Anzahl Ballons im Ziel<input id="balloonResultValue" name="balloons" type="number" min="0" step="1" inputmode="numeric" required></label>
+            <div class="hunt-admin-actions"><button class="secondary-button" type="submit">Ergebnis speichern</button><button id="publishBalloonResult" class="primary-button" type="button">Ergebnis veröffentlichen</button></div>
+            <p id="balloonResultMessage" class="save-message"></p>
+          </form>
+
+          <div id="balloonPublishedControls" class="hunt-admin-actions hidden"><button id="nextBalloonTeam" class="primary-button" type="button">Nächstes Reich auslosen</button></div>
+          <div class="balloon-admin-ranking"><div class="panel-title"><div><p class="eyebrow">Öffentliche Spielrangliste</p><h3>Gerettete Ballons</h3></div></div><div id="balloonAdminRanking"></div></div>
+          <div id="balloonCorrectionSection" class="balloon-corrections hidden"><p class="eyebrow">Kontrollierte Korrekturen</p><p class="save-message">Speichern ändert nur den Admin-Entwurf. Erst „Korrektur veröffentlichen“ ersetzt das öffentliche Ergebnis und – nach Spielabschluss – die Tagespunkte.</p><div id="balloonCorrections"></div></div>
+          <div id="balloonFinalisation" class="song-finalisation hidden"><p class="save-message">Kontrolliere die endgültige Rangliste. Gleichstände erhalten denselben Rang und dieselben Tagespunkte.</p><button id="finishBalloonMonster" class="primary-button" type="button">Spiel abschliessen und Punkte vergeben</button></div>
+          <p id="balloonMonsterMessage" class="form-error"></p>
+        </div>
+      </section>
 
       <section id="songBattleAdminPanel" class="panel song-admin-panel">
         <div class="panel-title"><div><p class="eyebrow">Vormittag · ca. 15 Minuten</p><h2>🎵 Song Battle</h2></div><span id="songBattleAdminStatus" class="save-message">Noch nicht gestartet</span></div>
@@ -178,6 +215,6 @@
     </div>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="admin.js?v=beer-pong-2"></script>
+  <script type="module" src="admin.js?v=ballon-monster-1"></script>
 </body>
 </html>

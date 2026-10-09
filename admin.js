@@ -1,8 +1,9 @@
-import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=beer-pong-2";
-import { getStore } from "./store.js?v=beer-pong-2";
-import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=beer-pong-2";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, CHALLENGE_STATIONS, normaliseGameChallengesAdmin, challengeEstimateQuestions, stationById, challengeTimerRemaining, calculateGameChallenges } from "./challenges-data.js?v=beer-pong-2";
-import { BEER_PONG, normaliseBeerPongAdmin, beerPongMatchList, calculateBeerPongGroupTable, beerPongTieGroups } from "./beer-pong-data.js?v=beer-pong-2";
+import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=ballon-monster-1";
+import { getStore } from "./store.js?v=ballon-monster-1";
+import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=ballon-monster-1";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, CHALLENGE_STATIONS, normaliseGameChallengesAdmin, challengeEstimateQuestions, stationById, challengeTimerRemaining, calculateGameChallenges } from "./challenges-data.js?v=ballon-monster-1";
+import { BEER_PONG, normaliseBeerPongAdmin, beerPongMatchList, calculateBeerPongGroupTable, beerPongTieGroups } from "./beer-pong-data.js?v=ballon-monster-1";
+import { BALLOON_MONSTER, normaliseBalloonMonsterAdmin, balloonTimerRemaining, balloonRanking } from "./balloon-monster-data.js?v=ballon-monster-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -12,7 +13,34 @@ let songReviewNumber = 1;
 let novitiusAdmin = { questions: {} }, novitiusParticipants = {}, novitiusAnswers = {}, novitiusAdminUnsubscribe = null, novitiusParticipantsUnsubscribe = null, novitiusAnswersUnsubscribe = null, novitiusReviewNumber = 1;
 let challengesAdmin = normaliseGameChallengesAdmin(), challengesAdminUnsubscribe = null, challengeReviewRound = 1, challengeEditorSignature = "", lastChallengeCurrentRound = 0;
 let beerPongAdmin = normaliseBeerPongAdmin(), beerPongAdminUnsubscribe = null;
+let balloonMonsterAdmin = normaliseBalloonMonsterAdmin(), balloonMonsterAdminUnsubscribe = null;
 let huntAdmin = { targets: normaliseHuntTargets() }, huntAdminUnsubscribe = null, huntTargetSignature = "";
+
+$("#startBalloonMonster").addEventListener("click", async () => {
+  const supply = Number($("#balloonMonsterSupply").value);
+  if (!confirm(`Ballon-Monster mit ${supply} Ballons Vorrat pro Reich starten? Bisherige Ballon-Monster-Daten werden ersetzt.`)) return;
+  await withDisabled($("#startBalloonMonster"), async () => { await store.startBalloonMonster(supply); toast("Ballon-Monster gestartet · Glücksrad bereit"); });
+});
+$("#resetBalloonMonster").addEventListener("click", async () => {
+  const running = currentState?.games?.[BALLOON_MONSTER.id]?.status === "running";
+  const message = running ? "Ballon-Monster abbrechen? Das Spiel verschwindet sofort von Handys und Grossbildschirm. Noch nicht vergebene Tagespunkte bleiben unverändert." : "Ballon-Monster vollständig zurücksetzen? Resultate und bereits vergebene Tagespunkte dieses Spiels werden entfernt.";
+  if (!confirm(message)) return;
+  await withDisabled($("#resetBalloonMonster"), async () => { await store.resetBalloonMonster(); toast(running ? "Ballon-Monster abgebrochen" : "Ballon-Monster zurückgesetzt"); });
+});
+$("#drawBalloonTeam").addEventListener("click", async () => { try { const id = await store.drawBalloonMonsterTeam(); toast(`${teamById(id)?.name || "Reich"} wurde ausgelost`); } catch (error) { balloonError(error); } });
+$("#undoBalloonDraw").addEventListener("click", async () => { if (!confirm("Diese Auslosung zurücknehmen und das Reich wieder ins Glücksrad legen?")) return; try { await store.undoBalloonMonsterDraw(); toast("Auslosung zurückgenommen"); } catch (error) { balloonError(error); } });
+$("#startBalloonTimer").addEventListener("click", async () => { try { await store.startBalloonMonsterTimer(); toast("90-Sekunden-Timer läuft"); } catch (error) { balloonError(error); } });
+$("#pauseBalloonTimer").addEventListener("click", async () => { try { await store.pauseBalloonMonsterTimer(); toast("Timer pausiert"); } catch (error) { balloonError(error); } });
+$("#resetBalloonTimer").addEventListener("click", async () => { if (!confirm("Timer wirklich auf 01:30 zurücksetzen?")) return; try { await store.resetBalloonMonsterTimer(); toast("Timer zurückgesetzt"); } catch (error) { balloonError(error); } });
+$("#startBalloonCourse").addEventListener("click", async () => { try { await store.startBalloonMonsterCourse(); toast("Parcours läuft"); } catch (error) { balloonError(error); } });
+$("#finishBalloonCourse").addEventListener("click", async () => { try { await store.finishBalloonMonsterCourse(); toast("Parcours beendet · Resultat erfassen"); } catch (error) { balloonError(error); } });
+$("#abortBalloonRound").addEventListener("click", async () => { if (!confirm("Aktuellen Durchgang abbrechen? Timer und Entwurf werden gelöscht; das Reich kommt zurück ins Glücksrad.")) return; try { await store.abortBalloonMonsterRound(); toast("Durchgang abgebrochen"); } catch (error) { balloonError(error); } });
+$("#balloonResultForm").addEventListener("submit", async event => { event.preventDefault(); const teamId = currentState?.games?.[BALLOON_MONSTER.id]?.currentTeamId; try { await store.saveBalloonMonsterResult(teamId, $("#balloonResultValue").value); toast("Ergebnis als Entwurf gespeichert"); } catch (error) { balloonError(error); } });
+$("#publishBalloonResult").addEventListener("click", async () => { const teamId = currentState?.games?.[BALLOON_MONSTER.id]?.currentTeamId; if (!confirm("Gespeichertes Ergebnis jetzt öffentlich anzeigen?")) return; try { await store.publishBalloonMonsterResult(teamId); toast("Ergebnis veröffentlicht"); } catch (error) { balloonError(error); } });
+$("#nextBalloonTeam").addEventListener("click", async () => { try { await store.prepareNextBalloonMonsterTeam(); await store.drawBalloonMonsterTeam(); toast("Nächstes Reich wird ausgelost"); } catch (error) { balloonError(error); } });
+$("#finishBalloonMonster").addEventListener("click", async () => { const game = currentState?.games?.[BALLOON_MONSTER.id], summary = balloonFinalSummary(game); if (!confirm(`Endrangliste bestätigen und Tagespunkte vergeben?\n\n${summary}`)) return; try { await store.finishBalloonMonster(); toast("Ballon-Monster abgeschlossen · Tagespunkte vergeben"); } catch (error) { balloonError(error); } });
+$("#balloonCorrections").addEventListener("submit", async event => { const form = event.target.closest("form[data-balloon-correction]"); if (!form) return; event.preventDefault(); try { await store.saveBalloonMonsterResult(form.dataset.balloonCorrection, form.elements.balloons.value); toast("Korrektur als Entwurf gespeichert"); } catch (error) { balloonError(error); } });
+$("#balloonCorrections").addEventListener("click", async event => { const button = event.target.closest("button[data-balloon-publish-correction]"); if (!button) return; const team = teamById(button.dataset.balloonPublishCorrection); if (!confirm(`Gespeicherte Korrektur für ${team?.name || "dieses Reich"} veröffentlichen und Tagespunkte neu berechnen?`)) return; try { await store.publishBalloonMonsterResult(button.dataset.balloonPublishCorrection); toast("Korrektur veröffentlicht · Tagespunkte aktualisiert"); } catch (error) { balloonError(error); } });
 
 $("#songRoundSelect").innerHTML = Array.from({ length: SONG_BATTLE.songCount }, (_, index) => `<option value="${index + 1}">Song ${index + 1} von ${SONG_BATTLE.songCount}</option>`).join("");
 $("#startSongBattle").addEventListener("click", async () => {
@@ -272,10 +300,15 @@ $("#adminResults").addEventListener("click", async event => {
     if (confirm("Beer-Pong-Turnier vollständig zurücksetzen? Matchresultate, Platzierung und Tagespunkte werden entfernt.")) { await store.resetBeerPong(); toast("Beer-Pong-Turnier zurückgesetzt"); }
     return;
   }
+  if (action === "delete" && id === BALLOON_MONSTER.id) {
+    if (confirm("Ballon-Monster vollständig zurücksetzen? Resultate, Auslosung und Tagespunkte werden entfernt.")) { await store.resetBalloonMonster(); toast("Ballon-Monster zurückgesetzt"); }
+    return;
+  }
   if (action === "delete" && confirm("Dieses Resultat wirklich löschen? Die Rangliste wird sofort neu berechnet.")) { await store.deleteGame(id); toast("Resultat gelöscht"); if (editingId === id) resetForm(); }
 });
 
 function renderAdmin(state) {
+  renderBalloonMonsterAdmin(state);
   renderSongBattleAdmin(state);
   renderNovitiusAdmin(state);
   renderGameChallengesAdmin(state);
@@ -288,6 +321,68 @@ function renderAdmin(state) {
   $("#adminResults").innerHTML = games.map(game => `<article class="admin-result"><div><span>${formatTime(game.createdAt, true)}</span><strong>${escapeHtml(game.name)}</strong><small>${escapeHtml(game.round || game.resultText || "")}</small></div><div class="admin-actions"><button data-action="edit" data-id="${game.id}">Bearbeiten</button><button class="danger" data-action="delete" data-id="${game.id}">Löschen</button></div></article>`).join("");
   $("#adminEmpty").classList.toggle("hidden", games.length > 0);
 }
+
+function renderBalloonMonsterAdmin(state) {
+  const game = state?.games?.[BALLOON_MONSTER.id], status = game?.status || "not-started", running = status === "running", completed = status === "completed";
+  const phase = effectiveBalloonPhase(game), team = teamById(game?.currentTeamId), remaining = game?.remainingTeamIds?.length ?? TEAMS.length;
+  const phaseLabels = { idle: "Nicht gestartet", intro: "Spielstart", wheel: "Glücksrad bereit", spinning: "Glücksrad dreht", selected: "Ausgelost", timer: "Ballons füllen", course: "Parcours läuft", entry: "Resultat erfassen", result: "Ergebnis veröffentlicht", completed: "Spiel abgeschlossen" };
+  $("#balloonMonsterAdminStatus").textContent = GAME_STATUSES[status] || "Noch nicht gestartet";
+  $("#balloonMonsterStart").classList.toggle("hidden", status !== "not-started");
+  $("#resetBalloonMonster").classList.toggle("hidden", status === "not-started");
+  $("#resetBalloonMonster").textContent = running ? "Spiel abbrechen" : "Zurücksetzen";
+  $("#resetBalloonMonster").classList.toggle("abort-action", running);
+  $("#balloonMonsterControls").classList.toggle("hidden", status === "not-started");
+  if (status === "not-started") return;
+  $("#balloonMonsterSupply").value = balloonMonsterAdmin.supply;
+  $("#balloonRemaining").textContent = `${remaining} / ${TEAMS.length}`;
+  $("#balloonCurrentTeam").textContent = team ? `${team.marker} ${team.name}` : completed ? "Alle Reiche gespielt" : "Noch nicht ausgelost";
+  $("#balloonCurrentPhase").textContent = phaseLabels[phase] || phase;
+  const canDraw = running && !game.currentTeamId && remaining > 0;
+  $("#balloonWheelControls").classList.toggle("hidden", !running || (!canDraw && !game.currentTeamId));
+  $("#drawBalloonTeam").classList.toggle("hidden", !canDraw);
+  $("#drawBalloonTeam").textContent = remaining === 1 ? "Letztes Reich ankündigen" : "Glücksrad drehen";
+  $("#undoBalloonDraw").classList.toggle("hidden", !running || !game.currentTeamId || !!game.publicResults?.[game.currentTeamId]);
+  const roundVisible = running && !!game.currentTeamId && !game.publicResults?.[game.currentTeamId];
+  $("#balloonRoundControls").classList.toggle("hidden", !roundVisible);
+  const timer = game?.timer || {}, remainingMs = balloonTimerRemaining(timer), expired = timer.status === "running" && remainingMs <= 0;
+  $("#balloonAdminTimer").textContent = expired ? "ZEIT ABGELAUFEN" : formatCountdown(remainingMs);
+  $("#balloonAdminTimerState").textContent = timer.status === "paused" ? "Pausiert" : expired ? "Keine weiteren Ballons mehr" : timer.status === "running" ? "Läuft" : timer.status === "finished" ? "Beendet" : "Bereit";
+  $("#startBalloonTimer").classList.toggle("hidden", !roundVisible || !(["spinning", "selected"].includes(game.phase) || timer.status === "paused"));
+  $("#startBalloonTimer").textContent = timer.status === "paused" ? "Timer fortsetzen" : "Timer starten";
+  $("#pauseBalloonTimer").classList.toggle("hidden", timer.status !== "running" || expired);
+  $("#resetBalloonTimer").classList.toggle("hidden", !roundVisible || timer.status === "idle");
+  $("#startBalloonCourse").classList.toggle("hidden", !roundVisible || !expired || game.phase === "course");
+  $("#finishBalloonCourse").classList.toggle("hidden", !roundVisible || game.phase !== "course");
+  $("#balloonResultForm").classList.toggle("hidden", !running || game.phase !== "entry");
+  if (running && game.phase === "entry" && team) {
+    $("#balloonResultTeam").textContent = `${team.marker} ${team.name} – Resultat`;
+    $("#balloonResultValue").max = balloonMonsterAdmin.supply;
+    const draft = balloonMonsterAdmin.drafts?.[team.id];
+    if (document.activeElement !== $("#balloonResultValue")) $("#balloonResultValue").value = draft?.balloons ?? "";
+    $("#balloonResultMessage").textContent = draft ? `✓ Entwurf gespeichert: ${draft.balloons} von maximal ${balloonMonsterAdmin.supply}` : "Noch nicht gespeichert";
+  }
+  $("#balloonPublishedControls").classList.toggle("hidden", !running || game.phase !== "result" || remaining <= 0);
+  const ranked = balloonRanking(game.publicResults);
+  $("#balloonAdminRanking").innerHTML = renderBalloonRanking(game, ranked, completed);
+  const showCorrections = Object.keys(game.publicResults || {}).length > 0;
+  $("#balloonCorrectionSection").classList.toggle("hidden", !showCorrections);
+  if (showCorrections) $("#balloonCorrections").innerHTML = TEAMS.filter(item => game.publicResults?.[item.id]).map(item => { const published = game.publicResults[item.id].balloons, draft = balloonMonsterAdmin.drafts?.[item.id]?.balloons ?? published; return `<form data-balloon-correction="${item.id}" style="--team:${item.color}"><strong>${item.marker} ${item.name}</strong><input name="balloons" type="number" min="0" max="${balloonMonsterAdmin.supply}" step="1" value="${Number(draft)}" required><button class="secondary-button" type="submit">Entwurf speichern</button><button class="primary-button" type="button" data-balloon-publish-correction="${item.id}">Korrektur veröffentlichen</button></form>`; }).join("");
+  const allPublished = TEAMS.every(item => Number.isInteger(Number(game.publicResults?.[item.id]?.balloons)));
+  $("#balloonFinalisation").classList.toggle("hidden", !running || !allPublished || remaining > 0);
+}
+
+function renderBalloonRanking(game, ranked = balloonRanking(game?.publicResults), completed = false) {
+  const played = new Set(ranked.ranking);
+  const rows = ranked.ranking.map(id => { const team = teamById(id); return `<div style="--team:${team.color}"><b>${ranked.placements[id]}.</b><strong>${team.marker} ${team.name}</strong><span>${Number(game.publicResults[id].balloons)} Ballons${completed ? ` · +${Number(game.points?.[id] || 0)}` : ""}</span></div>`; });
+  TEAMS.filter(team => !played.has(team.id)).forEach(team => rows.push(`<div class="is-pending" style="--team:${team.color}"><b>–</b><strong>${team.marker} ${team.name}</strong><span>noch nicht gespielt</span></div>`));
+  return rows.join("");
+}
+
+function effectiveBalloonPhase(game) { return game?.phase === "spinning" && Date.now() >= Number(game.spin?.endsAt || 0) ? "selected" : game?.phase || "idle"; }
+function formatCountdown(ms) { const seconds = Math.max(0, Math.ceil(Number(ms || 0) / 1000)); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
+function balloonFinalSummary(game) { const ranked = balloonRanking(game?.publicResults); return ranked.ranking.map(id => `${ranked.placements[id]}. ${teamById(id)?.name}: ${game.publicResults[id].balloons} Ballons → +${TEAMS.length + 1 - ranked.placements[id]}`).join("\n"); }
+function balloonError(error) { $("#balloonMonsterMessage").textContent = error.message; toast(error.message); }
+setInterval(() => { if (currentState?.games?.[BALLOON_MONSTER.id]?.status === "running") renderBalloonMonsterAdmin(currentState); }, 250);
 
 function renderBeerPongAdmin(state) {
   const game = state?.games?.[BEER_PONG.id];
@@ -675,7 +770,7 @@ function renderHuntAdmin(state) {
   $("#huntAdminHistory").innerHTML = [...finds].sort((a, b) => b.createdAt - a.createdAt).map(find => { const team = TEAMS.find(item => item.id === find.teamId); const target = huntAdmin.targets?.[find.targetId]; return `<div style="--team:${team?.color || "#888"}"><time>${formatTime(find.createdAt)}</time><span><strong>Gegenstand ${find.targetNumber}</strong> · ${escapeHtml(target?.internalName || find.targetId)}<small>von ${escapeHtml(find.playerName)} · ${team?.marker || ""} ${team?.name || find.teamId}${find.manual ? " · manuell" : ""}</small></span><b>+${Number(find.awardedPoints || 1)}</b></div>`; }).join("") || '<p class="empty-state">Noch keine Funde.</p>';
 }
 
-function loadEdit(id) { if (id === SONG_BATTLE.id) { songReviewNumber = 1; renderSongBattleAdmin(currentState); $("#songBattleAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === NOVITIUS_GAME.id) { novitiusReviewNumber = 1; renderNovitiusAdmin(currentState); $("#novitiusAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === GAME_CHALLENGES.id) { challengeReviewRound = 1; renderGameChallengesAdmin(currentState); $("#gameChallengesAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === BEER_PONG.id) { renderBeerPongAdmin(currentState); $("#beerPongAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } const game = currentState.games[id]; if (!game) return; editingId = id; $("#formTitle").textContent = "Resultat korrigieren"; $("#cancelEdit").classList.remove("hidden"); $("#gameName").value = game.name || ""; $("#roundName").value = game.round || ""; $("#resultText").value = game.resultText || ""; TEAMS.forEach(team => $(`#score-${team.id}`).value = Number(game.points?.[team.id] || 0)); $("#resultForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
+function loadEdit(id) { if (id === BALLOON_MONSTER.id) { renderBalloonMonsterAdmin(currentState); $("#balloonMonsterAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === SONG_BATTLE.id) { songReviewNumber = 1; renderSongBattleAdmin(currentState); $("#songBattleAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === NOVITIUS_GAME.id) { novitiusReviewNumber = 1; renderNovitiusAdmin(currentState); $("#novitiusAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === GAME_CHALLENGES.id) { challengeReviewRound = 1; renderGameChallengesAdmin(currentState); $("#gameChallengesAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === BEER_PONG.id) { renderBeerPongAdmin(currentState); $("#beerPongAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } const game = currentState.games[id]; if (!game) return; editingId = id; $("#formTitle").textContent = "Resultat korrigieren"; $("#cancelEdit").classList.remove("hidden"); $("#gameName").value = game.name || ""; $("#roundName").value = game.round || ""; $("#resultText").value = game.resultText || ""; TEAMS.forEach(team => $(`#score-${team.id}`).value = Number(game.points?.[team.id] || 0)); $("#resultForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
 function resetForm() { editingId = null; $("#resultForm").reset(); TEAMS.forEach(team => $(`#score-${team.id}`).value = 0); $("#formTitle").textContent = "Spielresultat erfassen"; $("#cancelEdit").classList.add("hidden"); $("#saveMessage").textContent = ""; }
 function toast(message) { $("#toast").textContent = message; $("#toast").classList.add("show"); setTimeout(() => $("#toast").classList.remove("show"), 2200); }
 async function withDisabled(button, action) { button.disabled = true; try { await action(); } catch (error) { toast(`Speichern fehlgeschlagen: ${error.message}`); } finally { button.disabled = false; } }
@@ -689,6 +784,7 @@ function setAccess(granted) {
   if (granted && !novitiusAnswersUnsubscribe) novitiusAnswersUnsubscribe = store.subscribeNovitiusAnswers(value => { novitiusAnswers = value; if (currentState) renderNovitiusAdmin(currentState); });
   if (granted && !challengesAdminUnsubscribe) challengesAdminUnsubscribe = store.subscribeGameChallengesAdmin(value => { challengesAdmin = value; challengeEditorSignature = ""; if (currentState) renderGameChallengesAdmin(currentState); });
   if (granted && !beerPongAdminUnsubscribe) beerPongAdminUnsubscribe = store.subscribeBeerPongAdmin(value => { beerPongAdmin = value; if (currentState) renderBeerPongAdmin(currentState); });
+  if (granted && !balloonMonsterAdminUnsubscribe) balloonMonsterAdminUnsubscribe = store.subscribeBalloonMonsterAdmin(value => { balloonMonsterAdmin = value; if (currentState) renderBalloonMonsterAdmin(currentState); });
   if (granted && !huntAdminUnsubscribe) huntAdminUnsubscribe = store.subscribeHuntAdmin(value => { huntAdmin = value; huntTargetSignature = ""; if (currentState) renderHuntAdmin(currentState); });
   if (!granted && songAnswersUnsubscribe) { songAnswersUnsubscribe(); songAnswersUnsubscribe = null; songAnswers = {}; }
   if (!granted && songParticipantsUnsubscribe) { songParticipantsUnsubscribe(); songParticipantsUnsubscribe = null; songParticipants = {}; }
@@ -698,6 +794,7 @@ function setAccess(granted) {
   if (!granted && novitiusAnswersUnsubscribe) { novitiusAnswersUnsubscribe(); novitiusAnswersUnsubscribe = null; novitiusAnswers = {}; }
   if (!granted && challengesAdminUnsubscribe) { challengesAdminUnsubscribe(); challengesAdminUnsubscribe = null; challengesAdmin = normaliseGameChallengesAdmin(); challengeEditorSignature = ""; }
   if (!granted && beerPongAdminUnsubscribe) { beerPongAdminUnsubscribe(); beerPongAdminUnsubscribe = null; beerPongAdmin = normaliseBeerPongAdmin(); }
+  if (!granted && balloonMonsterAdminUnsubscribe) { balloonMonsterAdminUnsubscribe(); balloonMonsterAdminUnsubscribe = null; balloonMonsterAdmin = normaliseBalloonMonsterAdmin(); }
   if (!granted && huntAdminUnsubscribe) { huntAdminUnsubscribe(); huntAdminUnsubscribe = null; huntAdmin = { targets: normaliseHuntTargets() }; huntTargetSignature = ""; }
 }
 function humanAuthError(code) { return ({ "auth/invalid-credential": "E-Mail oder Passwort ist falsch.", "auth/too-many-requests": "Zu viele Versuche. Bitte kurz warten.", "auth/network-request-failed": "Keine Verbindung. Bitte Internet prüfen." })[code] || "Login fehlgeschlagen."; }

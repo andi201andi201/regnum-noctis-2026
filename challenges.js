@@ -1,6 +1,6 @@
-import { TEAMS } from "./data.js?v=beer-pong-2";
-import { getStore } from "./store.js?v=beer-pong-2";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, stationById, challengeTimerRemaining } from "./challenges-data.js?v=beer-pong-2";
+import { TEAMS } from "./data.js?v=ballon-monster-1";
+import { getStore } from "./store.js?v=ballon-monster-1";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, stationById, challengeTimerRemaining } from "./challenges-data.js?v=ballon-monster-1";
 import { getPlayerProfile } from "./player.js";
 
 const $ = selector => document.querySelector(selector);

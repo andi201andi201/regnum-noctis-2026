@@ -1,8 +1,9 @@
 import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
-import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, rebuildNovitiusReveals, finalizeNovitiusGame, scoreNovitiusAnswer } from "./data.js?v=beer-pong-2";
-import { HUNT_DEFAULT_TARGETS, HUNT_POINTS_PER_OBJECT, normaliseHuntTargets, huntTargetList } from "./hunt-data.js?v=beer-pong-2";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, buildGameChallenges, normaliseGameChallengesAdmin, cleanEstimateQuestion, cleanChallengeResult, cleanEstimateValue, buildChallengePublicRound, buildPublicEstimate, calculateGameChallenges, challengeEstimateQuestions, challengeTimerRemaining, emptyChallengeTimer } from "./challenges-data.js?v=beer-pong-2";
-import { BEER_PONG, buildBeerPong, normaliseBeerPongAdmin, cleanBeerPongResult, publicBeerPongMatch, evaluateBeerPongGroups, releaseBeerPongSemifinals, releaseBeerPongFinal, completeBeerPong, resetBeerPongKnockouts, resetBeerPongFinal } from "./beer-pong-data.js?v=beer-pong-2";
+import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, rebuildNovitiusReveals, finalizeNovitiusGame, scoreNovitiusAnswer } from "./data.js?v=ballon-monster-1";
+import { HUNT_DEFAULT_TARGETS, HUNT_POINTS_PER_OBJECT, normaliseHuntTargets, huntTargetList } from "./hunt-data.js?v=ballon-monster-1";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, buildGameChallenges, normaliseGameChallengesAdmin, cleanEstimateQuestion, cleanChallengeResult, cleanEstimateValue, buildChallengePublicRound, buildPublicEstimate, calculateGameChallenges, challengeEstimateQuestions, challengeTimerRemaining, emptyChallengeTimer } from "./challenges-data.js?v=ballon-monster-1";
+import { BEER_PONG, buildBeerPong, normaliseBeerPongAdmin, cleanBeerPongResult, publicBeerPongMatch, evaluateBeerPongGroups, releaseBeerPongSemifinals, releaseBeerPongFinal, completeBeerPong, resetBeerPongKnockouts, resetBeerPongFinal } from "./beer-pong-data.js?v=ballon-monster-1";
+import { BALLOON_MONSTER, buildBalloonMonster, normaliseBalloonMonsterAdmin, cleanBalloonSupply, cleanBalloonResult, announceBalloonTeam, undoBalloonDraw, emptyBalloonTimer, balloonTimerRemaining, publishBalloonResult, completeBalloonMonster } from "./balloon-monster-data.js?v=ballon-monster-1";
 
 const STORAGE_KEY = "regnum-noctis-demo";
 let firebase = null;
@@ -46,6 +47,7 @@ function firebaseStore() {
     subscribeNovitiusAnswers(callback) { return firebase.onValue(firebase.ref(firebase.db, "novitiusAnswers"), snapshot => callback(snapshot.val() || {})); },
     subscribeGameChallengesAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "gameChallengesAdmin"), snapshot => callback(normaliseGameChallengesAdmin(snapshot.val()))); },
     subscribeBeerPongAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "beerPongAdmin"), snapshot => callback(normaliseBeerPongAdmin(snapshot.val()))); },
+    subscribeBalloonMonsterAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "balloonMonsterAdmin"), snapshot => callback(normaliseBalloonMonsterAdmin(snapshot.val()))); },
     subscribeHuntAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "huntAdmin"), snapshot => callback({ targets: normaliseHuntTargets(snapshot.val()?.targets) })); },
     async subscribeSongBattleTeam(teamId, callback) {
       if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
@@ -421,6 +423,92 @@ function firebaseStore() {
       const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${GAME_CHALLENGES.id}`)), firebase.get(firebase.ref(firebase.db, "gameChallengesAdmin"))]);
       await firebase.update(firebase.ref(firebase.db), { [`games/${GAME_CHALLENGES.id}`]: buildGameChallenges("not-started", gameSnapshot.val()), gameChallengesAdmin: resetGameChallengesAdmin(adminSnapshot.val()), "settings/updatedAt": firebase.serverTimestamp() });
     },
+    async startBalloonMonster(supply) {
+      const cleanSupply = cleanBalloonSupply(supply);
+      await firebase.update(firebase.ref(firebase.db), {
+        [`games/${BALLOON_MONSTER.id}`]: buildBalloonMonster("running"),
+        balloonMonsterAdmin: { supply: cleanSupply, drafts: {}, updatedAt: Date.now() },
+        "settings/updatedAt": firebase.serverTimestamp()
+      });
+    },
+    async drawBalloonMonsterTeam() {
+      const gameRef = firebase.ref(firebase.db, `games/${BALLOON_MONSTER.id}`);
+      let selectedTeamId = "";
+      const result = await firebase.runTransaction(gameRef, current => {
+        if (current?.status !== "running") return;
+        if (current.currentTeamId) return;
+        const remaining = (current.remainingTeamIds || []).filter(id => TEAMS.some(team => team.id === id));
+        if (!remaining.length) return;
+        selectedTeamId = remaining.length === 1 ? remaining[0] : remaining[Math.floor(Math.random() * remaining.length)];
+        return announceBalloonTeam(current, selectedTeamId, remaining.length === 1);
+      });
+      if (!result.committed) throw new Error("Auslosung nicht möglich. Prüfe, ob der vorherige Durchgang veröffentlicht wurde.");
+      await firebase.update(firebase.ref(firebase.db, "settings"), { updatedAt: firebase.serverTimestamp() });
+      return selectedTeamId;
+    },
+    async undoBalloonMonsterDraw() {
+      const gameRef = firebase.ref(firebase.db, `games/${BALLOON_MONSTER.id}`), game = undoBalloonDraw((await firebase.get(gameRef)).val());
+      await firebase.update(firebase.ref(firebase.db), { [`games/${BALLOON_MONSTER.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async startBalloonMonsterTimer() {
+      const gameRef = firebase.ref(firebase.db, `games/${BALLOON_MONSTER.id}`), game = (await firebase.get(gameRef)).val();
+      if (game?.status !== "running" || !game.currentTeamId || !["spinning", "selected", "timer"].includes(game.phase)) throw new Error("Bitte zuerst ein Reich auslosen.");
+      const remainingMs = game.timer?.status === "paused" ? balloonTimerRemaining(game.timer) : BALLOON_MONSTER.timerSeconds * 1000;
+      if (remainingMs <= 0) throw new Error("Die Zeit ist abgelaufen. Starte jetzt den Parcours oder setze den Timer zurück.");
+      const now = Date.now();
+      await firebase.update(gameRef, { phase: "timer", timer: { status: "running", durationMs: BALLOON_MONSTER.timerSeconds * 1000, remainingMs, startedAt: now, endsAt: now + remainingMs }, updatedAt: firebase.serverTimestamp() });
+    },
+    async pauseBalloonMonsterTimer() {
+      const gameRef = firebase.ref(firebase.db, `games/${BALLOON_MONSTER.id}`), game = (await firebase.get(gameRef)).val();
+      if (game?.status !== "running" || game.timer?.status !== "running") throw new Error("Der Timer läuft nicht.");
+      await firebase.update(gameRef, { timer: { ...game.timer, status: "paused", remainingMs: balloonTimerRemaining(game.timer), endsAt: 0 }, updatedAt: firebase.serverTimestamp() });
+    },
+    async resetBalloonMonsterTimer() {
+      const gameRef = firebase.ref(firebase.db, `games/${BALLOON_MONSTER.id}`), game = (await firebase.get(gameRef)).val();
+      if (game?.status !== "running" || !game.currentTeamId) throw new Error("Kein aktiver Durchgang.");
+      await firebase.update(gameRef, { phase: "selected", timer: emptyBalloonTimer(), updatedAt: firebase.serverTimestamp() });
+    },
+    async startBalloonMonsterCourse() {
+      const gameRef = firebase.ref(firebase.db, `games/${BALLOON_MONSTER.id}`), game = (await firebase.get(gameRef)).val();
+      if (game?.status !== "running" || !game.currentTeamId || game.timer?.status !== "running" || balloonTimerRemaining(game.timer) > 0) throw new Error("Der 90-Sekunden-Timer muss zuerst abgelaufen sein.");
+      await firebase.update(gameRef, { phase: "course", timer: { ...game.timer, status: "finished", remainingMs: 0, endsAt: 0 }, updatedAt: firebase.serverTimestamp() });
+    },
+    async finishBalloonMonsterCourse() {
+      const gameRef = firebase.ref(firebase.db, `games/${BALLOON_MONSTER.id}`), game = (await firebase.get(gameRef)).val();
+      if (game?.status !== "running" || game.phase !== "course") throw new Error("Der Parcours läuft nicht.");
+      await firebase.update(gameRef, { phase: "entry", updatedAt: firebase.serverTimestamp() });
+    },
+    async abortBalloonMonsterRound() {
+      const gameRef = firebase.ref(firebase.db, `games/${BALLOON_MONSTER.id}`), game = (await firebase.get(gameRef)).val();
+      if (game?.status !== "running" || !game.currentTeamId || game.publicResults?.[game.currentTeamId]) throw new Error("Dieser Durchgang kann nicht abgebrochen werden.");
+      await firebase.update(firebase.ref(firebase.db), { [`games/${BALLOON_MONSTER.id}`]: undoBalloonDraw(game), [`balloonMonsterAdmin/drafts/${game.currentTeamId}`]: null, "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async saveBalloonMonsterResult(teamId, balloons) {
+      const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${BALLOON_MONSTER.id}`)), firebase.get(firebase.ref(firebase.db, "balloonMonsterAdmin"))]);
+      const game = gameSnapshot.val(), admin = normaliseBalloonMonsterAdmin(adminSnapshot.val());
+      if (!TEAMS.some(team => team.id === teamId) || (game?.currentTeamId !== teamId && !game?.publicResults?.[teamId])) throw new Error("Dieses Reich kann gerade nicht bearbeitet werden.");
+      const draft = cleanBalloonResult(balloons, admin.supply);
+      await firebase.update(firebase.ref(firebase.db), { [`balloonMonsterAdmin/drafts/${teamId}`]: draft, "balloonMonsterAdmin/updatedAt": firebase.serverTimestamp() });
+    },
+    async publishBalloonMonsterResult(teamId) {
+      const [gameSnapshot, adminSnapshot] = await Promise.all([firebase.get(firebase.ref(firebase.db, `games/${BALLOON_MONSTER.id}`)), firebase.get(firebase.ref(firebase.db, "balloonMonsterAdmin"))]);
+      const game = publishBalloonResult(gameSnapshot.val(), adminSnapshot.val(), teamId);
+      await firebase.update(firebase.ref(firebase.db), { [`games/${BALLOON_MONSTER.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async prepareNextBalloonMonsterTeam() {
+      const gameRef = firebase.ref(firebase.db, `games/${BALLOON_MONSTER.id}`), game = (await firebase.get(gameRef)).val();
+      if (game?.status !== "running" || game.phase !== "result" || !game.publicResults?.[game.currentTeamId]) throw new Error("Bitte zuerst das aktuelle Ergebnis veröffentlichen.");
+      if (!(game.remainingTeamIds || []).length) throw new Error("Alle fünf Reiche haben gespielt. Schliesse jetzt das Spiel ab.");
+      await firebase.update(gameRef, { phase: "wheel", currentTeamId: "", spin: null, timer: emptyBalloonTimer(), updatedAt: firebase.serverTimestamp() });
+    },
+    async finishBalloonMonster() {
+      const gameRef = firebase.ref(firebase.db, `games/${BALLOON_MONSTER.id}`), game = completeBalloonMonster((await firebase.get(gameRef)).val());
+      await firebase.update(firebase.ref(firebase.db), { [`games/${BALLOON_MONSTER.id}`]: game, "settings/updatedAt": firebase.serverTimestamp() });
+    },
+    async resetBalloonMonster() {
+      const current = (await firebase.get(firebase.ref(firebase.db, `games/${BALLOON_MONSTER.id}`))).val();
+      await firebase.update(firebase.ref(firebase.db), { [`games/${BALLOON_MONSTER.id}`]: buildBalloonMonster("not-started", current), balloonMonsterAdmin: null, "settings/updatedAt": firebase.serverTimestamp() });
+    },
     async startBeerPong() {
       await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}`]: buildBeerPong("running"), beerPongAdmin: normaliseBeerPongAdmin(), "settings/mode": "live", "settings/updatedAt": firebase.serverTimestamp() });
     },
@@ -588,6 +676,7 @@ function localStore() {
     subscribeNovitiusAnswers(callback) { const listener = state => callback(state.novitiusAnswers || {}); listeners.add(listener); callback(read().novitiusAnswers || {}); return () => listeners.delete(listener); },
     subscribeGameChallengesAdmin(callback) { const listener = state => callback(normaliseGameChallengesAdmin(state.gameChallengesAdmin)); listeners.add(listener); callback(normaliseGameChallengesAdmin(read().gameChallengesAdmin)); return () => listeners.delete(listener); },
     subscribeBeerPongAdmin(callback) { const listener = state => callback(normaliseBeerPongAdmin(state.beerPongAdmin)); listeners.add(listener); callback(normaliseBeerPongAdmin(read().beerPongAdmin)); return () => listeners.delete(listener); },
+    subscribeBalloonMonsterAdmin(callback) { const listener = state => callback(normaliseBalloonMonsterAdmin(state.balloonMonsterAdmin)); listeners.add(listener); callback(normaliseBalloonMonsterAdmin(read().balloonMonsterAdmin)); return () => listeners.delete(listener); },
     subscribeHuntAdmin(callback) { const listener = state => callback({ targets: normaliseHuntTargets(state.huntAdmin?.targets) }); listeners.add(listener); listener(read()); return () => listeners.delete(listener); },
     async subscribeSongBattleTeam(teamId, callback) { const listener = state => { const participant = state.songBattleParticipants?.[teamId] || null; callback({ answers: state.songBattleAnswers?.[teamId] || {}, participant, owned: participant?.claimantId === getLocalProfileId() }); }; listeners.add(listener); listener(read()); return () => listeners.delete(listener); },
     async subscribeNovitiusPlayer(callback) { const participantId = getLocalProfileId(); const listener = state => callback({ participantId, participant: state.novitiusParticipants?.[participantId] || null, answers: state.novitiusAnswers?.[participantId] || {} }); listeners.add(listener); listener(read()); return () => listeners.delete(listener); },
@@ -631,6 +720,20 @@ function localStore() {
     async revealGameChallengeEstimate() { const state = read(), game = state.games[GAME_CHALLENGES.id]; for (let round = 1; round <= GAME_CHALLENGES.roundCount; round += 1) if (!game?.roundPublished?.[`round-${round}`]) throw new Error("Die Schätz-Challenge darf erst nach allen fünf Runden aufgelöst werden."); game.estimateRevealed = true; game.publicEstimate = buildPublicEstimate(state.gameChallengesAdmin); game.updatedAt = Date.now(); write(state); },
     async finishGameChallenges() { const state = read(); state.games[GAME_CHALLENGES.id] = calculateGameChallenges(state.games[GAME_CHALLENGES.id], state.gameChallengesAdmin); state.settings.updatedAt = Date.now(); write(state); },
     async resetGameChallenges() { const state = read(); state.games[GAME_CHALLENGES.id] = buildGameChallenges("not-started", state.games[GAME_CHALLENGES.id]); state.gameChallengesAdmin = resetGameChallengesAdmin(state.gameChallengesAdmin); state.settings.updatedAt = Date.now(); write(state); },
+    async startBalloonMonster(supply) { const state = read(); state.games[BALLOON_MONSTER.id] = buildBalloonMonster("running"); state.balloonMonsterAdmin = { supply: cleanBalloonSupply(supply), drafts: {}, updatedAt: Date.now() }; state.settings.updatedAt = Date.now(); write(state); },
+    async drawBalloonMonsterTeam() { const state = read(), game = state.games[BALLOON_MONSTER.id]; if (game?.status !== "running" || game.currentTeamId || !(game.remainingTeamIds || []).length) throw new Error("Auslosung nicht möglich. Prüfe, ob der vorherige Durchgang veröffentlicht wurde."); const remaining = game.remainingTeamIds, teamId = remaining.length === 1 ? remaining[0] : remaining[Math.floor(Math.random() * remaining.length)]; state.games[BALLOON_MONSTER.id] = announceBalloonTeam(game, teamId, remaining.length === 1); state.settings.updatedAt = Date.now(); write(state); return teamId; },
+    async undoBalloonMonsterDraw() { const state = read(); state.games[BALLOON_MONSTER.id] = undoBalloonDraw(state.games[BALLOON_MONSTER.id]); state.settings.updatedAt = Date.now(); write(state); },
+    async startBalloonMonsterTimer() { const state = read(), game = state.games[BALLOON_MONSTER.id]; if (game?.status !== "running" || !game.currentTeamId || !["spinning", "selected", "timer"].includes(game.phase)) throw new Error("Bitte zuerst ein Reich auslosen."); const remainingMs = game.timer?.status === "paused" ? balloonTimerRemaining(game.timer) : BALLOON_MONSTER.timerSeconds * 1000; if (remainingMs <= 0) throw new Error("Die Zeit ist abgelaufen. Starte jetzt den Parcours oder setze den Timer zurück."); const now = Date.now(); game.phase = "timer"; game.timer = { status: "running", durationMs: BALLOON_MONSTER.timerSeconds * 1000, remainingMs, startedAt: now, endsAt: now + remainingMs }; game.updatedAt = now; write(state); },
+    async pauseBalloonMonsterTimer() { const state = read(), game = state.games[BALLOON_MONSTER.id]; if (game?.status !== "running" || game.timer?.status !== "running") throw new Error("Der Timer läuft nicht."); game.timer = { ...game.timer, status: "paused", remainingMs: balloonTimerRemaining(game.timer), endsAt: 0 }; game.updatedAt = Date.now(); write(state); },
+    async resetBalloonMonsterTimer() { const state = read(), game = state.games[BALLOON_MONSTER.id]; if (game?.status !== "running" || !game.currentTeamId) throw new Error("Kein aktiver Durchgang."); game.phase = "selected"; game.timer = emptyBalloonTimer(); game.updatedAt = Date.now(); write(state); },
+    async startBalloonMonsterCourse() { const state = read(), game = state.games[BALLOON_MONSTER.id]; if (game?.status !== "running" || !game.currentTeamId || game.timer?.status !== "running" || balloonTimerRemaining(game.timer) > 0) throw new Error("Der 90-Sekunden-Timer muss zuerst abgelaufen sein."); game.phase = "course"; game.timer = { ...game.timer, status: "finished", remainingMs: 0, endsAt: 0 }; game.updatedAt = Date.now(); write(state); },
+    async finishBalloonMonsterCourse() { const state = read(), game = state.games[BALLOON_MONSTER.id]; if (game?.status !== "running" || game.phase !== "course") throw new Error("Der Parcours läuft nicht."); game.phase = "entry"; game.updatedAt = Date.now(); write(state); },
+    async abortBalloonMonsterRound() { const state = read(), game = state.games[BALLOON_MONSTER.id]; if (game?.status !== "running" || !game.currentTeamId || game.publicResults?.[game.currentTeamId]) throw new Error("Dieser Durchgang kann nicht abgebrochen werden."); const teamId = game.currentTeamId; state.games[BALLOON_MONSTER.id] = undoBalloonDraw(game); state.balloonMonsterAdmin = normaliseBalloonMonsterAdmin(state.balloonMonsterAdmin); delete state.balloonMonsterAdmin.drafts[teamId]; state.settings.updatedAt = Date.now(); write(state); },
+    async saveBalloonMonsterResult(teamId, balloons) { const state = read(), game = state.games[BALLOON_MONSTER.id], admin = state.balloonMonsterAdmin = normaliseBalloonMonsterAdmin(state.balloonMonsterAdmin); if (!TEAMS.some(team => team.id === teamId) || (game?.currentTeamId !== teamId && !game?.publicResults?.[teamId])) throw new Error("Dieses Reich kann gerade nicht bearbeitet werden."); admin.drafts[teamId] = cleanBalloonResult(balloons, admin.supply); admin.updatedAt = Date.now(); write(state); },
+    async publishBalloonMonsterResult(teamId) { const state = read(); state.games[BALLOON_MONSTER.id] = publishBalloonResult(state.games[BALLOON_MONSTER.id], state.balloonMonsterAdmin, teamId); state.settings.updatedAt = Date.now(); write(state); },
+    async prepareNextBalloonMonsterTeam() { const state = read(), game = state.games[BALLOON_MONSTER.id]; if (game?.status !== "running" || game.phase !== "result" || !game.publicResults?.[game.currentTeamId]) throw new Error("Bitte zuerst das aktuelle Ergebnis veröffentlichen."); if (!(game.remainingTeamIds || []).length) throw new Error("Alle fünf Reiche haben gespielt. Schliesse jetzt das Spiel ab."); game.phase = "wheel"; game.currentTeamId = ""; game.spin = null; game.timer = emptyBalloonTimer(); game.updatedAt = Date.now(); write(state); },
+    async finishBalloonMonster() { const state = read(); state.games[BALLOON_MONSTER.id] = completeBalloonMonster(state.games[BALLOON_MONSTER.id]); state.settings.updatedAt = Date.now(); write(state); },
+    async resetBalloonMonster() { const state = read(); state.games[BALLOON_MONSTER.id] = buildBalloonMonster("not-started", state.games[BALLOON_MONSTER.id]); state.balloonMonsterAdmin = normaliseBalloonMonsterAdmin(); state.settings.updatedAt = Date.now(); write(state); },
     async startBeerPong() { const state = read(); state.games[BEER_PONG.id] = buildBeerPong("running"); state.beerPongAdmin = normaliseBeerPongAdmin(); state.settings.mode = "live"; state.settings.updatedAt = Date.now(); write(state); },
     async startBeerPongMatch(matchId) { const state = read(), game = state.games[BEER_PONG.id], match = game?.matches?.[matchId]; validateBeerPongMatchStart(game, match); const now = Date.now(); match.status = "running"; match.startedAt = now; match.endsAt = match.stage === "final" ? 0 : now + 6 * 60000; if (match.stage === "group") game.currentRound = Number(match.round); write(state); },
     async setBeerPongRound(roundNumber) { const state = read(), game = state.games[BEER_PONG.id], round = Number(roundNumber); if (game?.status !== "running" || game.phase !== "groups" || ![1, 2, 3].includes(round)) throw new Error("Diese Gruppenrunde kann nicht aufgeschaltet werden."); game.currentRound = round; game.updatedAt = Date.now(); state.settings.updatedAt = Date.now(); write(state); },
@@ -709,6 +812,7 @@ function normalise(value) {
     novitiusSubmissions: value?.novitiusSubmissions || {},
     novitiusAdmin: normaliseNovitiusAdmin(value?.novitiusAdmin),
     gameChallengesAdmin: normaliseGameChallengesAdmin(value?.gameChallengesAdmin),
+    balloonMonsterAdmin: normaliseBalloonMonsterAdmin(value?.balloonMonsterAdmin),
     beerPongAdmin: normaliseBeerPongAdmin(value?.beerPongAdmin),
     huntAdmin: { targets: normaliseHuntTargets(value?.huntAdmin?.targets) },
     oracleAnswers: value?.oracleAnswers || {},

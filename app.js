@@ -1,8 +1,9 @@
-import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=beer-pong-2";
-import { getStore } from "./store.js?v=beer-pong-2";
+import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=ballon-monster-1";
+import { getStore } from "./store.js?v=ballon-monster-1";
 import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js";
-import { GAME_CHALLENGES } from "./challenges-data.js?v=beer-pong-2";
-import { BEER_PONG } from "./beer-pong-data.js?v=beer-pong-2";
+import { GAME_CHALLENGES } from "./challenges-data.js?v=ballon-monster-1";
+import { BEER_PONG } from "./beer-pong-data.js?v=ballon-monster-1";
+import { BALLOON_MONSTER } from "./balloon-monster-data.js?v=ballon-monster-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -19,6 +20,7 @@ window.addEventListener("regnum-player-changed", () => {
     maybeCelebrateGameWinner(currentState.games?.[SONG_BATTLE.id], SONG_BATTLE.id);
     maybeCelebrateGameWinner(currentState.games?.[NOVITIUS_GAME.id], NOVITIUS_GAME.id);
     maybeCelebrateGameWinner(currentState.games?.[GAME_CHALLENGES.id], GAME_CHALLENGES.id);
+    maybeCelebrateGameWinner(currentState.games?.[BALLOON_MONSTER.id], BALLOON_MONSTER.id);
   }
 });
 $("#victoryCelebration").addEventListener("click", hideVictoryCelebration);
@@ -124,6 +126,9 @@ function render(state) {
   if (mode !== "live") return;
 
   renderSongBattle(state.games[SONG_BATTLE.id]);
+  const balloonGame = state.games[BALLOON_MONSTER.id];
+  $("#balloonMonsterCard").classList.toggle("hidden", balloonGame?.status !== "running");
+  if (balloonGame?.status === "completed") maybeCelebrateGameWinner(balloonGame, BALLOON_MONSTER.id);
   const novitiusGame = state.games[NOVITIUS_GAME.id];
   if (novitiusGame?.status === "completed") maybeCelebrateGameWinner(novitiusGame, NOVITIUS_GAME.id);
   const challengesGame = state.games[GAME_CHALLENGES.id];
@@ -223,6 +228,12 @@ function renderSongReveal(reveal) {
 }
 
 function renderGameResult(game) {
+  if (game.id === BALLOON_MONSTER.id && game.status === "completed") {
+    return `<article class="result-row song-public-result balloon-public-result"><div class="result-title"><span>${formatTime(game.createdAt, true)}</span><strong>🎈 BALLON-MONSTER – RESULTAT</strong><small>Gerettete Ballons · Gleichstände teilen sich den Rang</small><ol>${(game.ranking || []).map((teamId, index) => {
+      const team = TEAMS.find(item => item.id === teamId), place = Number(game.placements?.[teamId] || index + 1);
+      return `<li style="--team:${team?.color || "#888"}"><b>${place}. ${place === 1 ? "🏆 " : ""}${team?.marker || ""} ${escapeHtml(team?.name || teamId)}</b><span>${Number(game.internalPoints?.[teamId] || 0)} Ballons · +${Number(game.points?.[teamId] || 0)}</span></li>`;
+    }).join("")}</ol></div></article>`;
+  }
   if (game.id === BEER_PONG.id && game.status === "completed") {
     return `<article class="result-row song-public-result beer-pong-public-result"><div class="result-title"><span>${formatTime(game.createdAt, true)}</span><strong>🍺 BEER PONG – TURNIERRESULTAT</strong><ol>${(game.ranking || []).map((teamId, index) => {
       const team = TEAMS.find(item => item.id === teamId), place = Number(game.placements?.[teamId] || index + 1);

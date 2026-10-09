@@ -1,8 +1,9 @@
-import { TEAMS, totalsFromGames, formatTime, NOVITIUS_GAME } from "./data.js?v=beer-pong-2";
-import { getStore } from "./store.js?v=beer-pong-2";
-import { huntFinds, huntProgress } from "./hunt-data.js?v=beer-pong-2";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, stationById, challengeTimerRemaining } from "./challenges-data.js?v=beer-pong-2";
-import { BEER_PONG, beerPongMatchList, calculateBeerPongGroupTable } from "./beer-pong-data.js?v=beer-pong-2";
+import { TEAMS, totalsFromGames, formatTime, NOVITIUS_GAME } from "./data.js?v=ballon-monster-1";
+import { getStore } from "./store.js?v=ballon-monster-1";
+import { huntFinds, huntProgress } from "./hunt-data.js?v=ballon-monster-1";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, stationById, challengeTimerRemaining } from "./challenges-data.js?v=ballon-monster-1";
+import { BEER_PONG, beerPongMatchList, calculateBeerPongGroupTable } from "./beer-pong-data.js?v=ballon-monster-1";
+import { BALLOON_MONSTER, balloonTimerRemaining, balloonRanking } from "./balloon-monster-data.js?v=ballon-monster-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -23,9 +24,52 @@ function render(state) {
   if (latest) { const team = TEAMS.find(item => item.id === latest.teamId); $("#displayLastFind").innerHTML = `<span>Letzter Fund · ${formatTime(latest.createdAt)}</span><strong>Gegenstand ${latest.targetNumber} gefunden</strong><small>von ${escapeHtml(latest.playerName)} · ${team?.marker || ""} ${team?.name || latest.teamId}</small>`; }
   renderNovitius(state);
   renderChallenges(state);
+  renderBalloonMonster(state);
   renderBeerPong(state, totals);
   $("#displayUpdated").textContent = state.settings.updatedAt ? `Stand ${formatTime(state.settings.updatedAt)}` : "";
 }
+
+function renderBalloonMonster(state) {
+  const game = state.games?.[BALLOON_MONSTER.id], beer = state.games?.[BEER_PONG.id];
+  const beerVisible = beer?.status === "running" || (beer?.status === "completed" && !beer.finalReveal);
+  const visible = !beerVisible && (game?.status === "running" || (game?.status === "completed" && Date.now() - Number(game.updatedAt || 0) < 30000));
+  document.body.classList.toggle("balloon-monster-active", visible);
+  $("#displayBalloonMonster").classList.toggle("hidden", !visible);
+  if (!visible) return;
+  $("#displayBalloonMonster").innerHTML = balloonMonsterArena(game);
+}
+
+function balloonMonsterArena(game) {
+  const phase = game.phase === "spinning" && Date.now() >= Number(game.spin?.endsAt || 0) ? "selected" : game.phase;
+  const team = teamById(game.currentTeamId), ranking = balloonRanking(game.publicResults);
+  const head = `<header class="balloon-tv-head"><div><p class="eyebrow">Spiel 1 · Die Prüfung der fünf Reiche</p><h1>🎈 Ballon-Monster</h1></div><span>${game.status === "completed" ? "Abgeschlossen" : `${Number(game.remainingTeamIds?.length || 0)} Reiche im Rad`}</span></header>`;
+  if (game.status === "completed") return `${head}<div class="balloon-tv-final"><p>DIE PRÜFUNG IST ENTSCHIEDEN</p><h2>Endrangliste</h2>${balloonTvRanking(game, ranking, true)}<strong>${(game.winnerIds || []).map(id => teamById(id)?.name).join(" & ")} triumphiert${(game.winnerIds || []).length > 1 ? "en" : ""}!</strong></div>`;
+  if ((phase === "intro" || phase === "wheel") && !team) return `${head}<div class="balloon-tv-intro"><div class="balloon-orbit">${TEAMS.map((item, index) => `<img src="${item.logo}" alt="" style="--i:${index};--team:${item.color}">`).join("")}</div><p>DIE PRÜFUNG DER FÜNF REICHE</p><h2>${phase === "intro" ? "Das Ballon-Monster erwacht" : "Das Glücksrad ist bereit"}</h2></div>`;
+  if (phase === "spinning") return `${head}${balloonWheel(game)}<p class="balloon-wheel-call">DAS SCHICKSAL ENTSCHEIDET …</p>`;
+  if (phase === "selected") return `${head}<div class="balloon-team-call" style="--team:${team?.color || "#888"}"><img src="${team?.logo || ""}" alt=""><p>${team?.marker || ""} ${escapeHtml(team?.name || "")}</p><h2>MACHT EUCH BEREIT!</h2></div>`;
+  if (phase === "timer") {
+    const remaining = balloonTimerRemaining(game.timer), expired = game.timer?.status === "running" && remaining <= 0;
+    return `${head}<div class="balloon-tv-timer ${expired ? "expired" : ""}" style="--team:${team?.color || "#888"}"><img src="${team?.logo || ""}" alt=""><p>${team?.marker || ""} ${escapeHtml(team?.name || "")}</p><strong>${expired ? "ZEIT ABGELAUFEN!" : formatCountdown(remaining)}</strong><h2>${expired ? "Keine weiteren Ballons!" : game.timer?.status === "paused" ? "PAUSE" : "FÜLLT DAS BALLON-MONSTER!"}</h2></div>`;
+  }
+  if (phase === "course" || phase === "entry") return `${head}<div class="balloon-team-call balloon-course" style="--team:${team?.color || "#888"}"><img src="${team?.logo || ""}" alt=""><p>${team?.marker || ""} ${escapeHtml(team?.name || "")}</p><h2>${phase === "course" ? "DER PARCOURS LÄUFT" : "BALLONS WERDEN GEZÄHLT"}</h2><span>${phase === "course" ? "Wie viele Ballons schafft ihr ins Ziel?" : "Die Spielleitung prüft das Resultat …"}</span></div>`;
+  if (phase === "result") return `${head}<div class="balloon-tv-result" style="--team:${team?.color || "#888"}"><img src="${team?.logo || ""}" alt=""><div><p>${team?.marker || ""} ${escapeHtml(team?.name || "")}</p><strong>${Number(game.publicResults?.[team?.id]?.balloons || 0)} BALLONS GERETTET!</strong></div></div>${balloonTvRanking(game, ranking)}`;
+  return `${head}<div class="balloon-tv-intro"><h2>Bereit für das nächste Reich</h2></div>`;
+}
+
+function balloonWheel(game) {
+  const ids = TEAMS.map(team => team.id).filter(id => id === game.currentTeamId || game.remainingTeamIds?.includes(id)), selectedIndex = ids.indexOf(game.currentTeamId), segment = 360 / ids.length, finalAngle = 1800 + (360 - (selectedIndex * segment + segment / 2));
+  const gradient = ids.map((id, index) => { const team = teamById(id); return `${team?.color || "#777"} ${index * segment}deg ${(index + 1) * segment}deg`; }).join(",");
+  return `<div class="balloon-wheel-stage"><div class="balloon-wheel-pointer">▼</div><div class="balloon-wheel spinning" style="--wheel-gradient:conic-gradient(${gradient});--wheel-end:${finalAngle}deg;--segments:${ids.length}">${ids.map((id, index) => { const item = teamById(id), angle = index * segment + segment / 2; return `<span style="--angle:${angle}deg"><img src="${item.logo}" alt=""><b>${escapeHtml(item.name)}</b></span>`; }).join("")}</div></div>`;
+}
+
+function balloonTvRanking(game, ranked = balloonRanking(game.publicResults), final = false) {
+  const played = new Set(ranked.ranking), rows = ranked.ranking.map(id => { const team = teamById(id); return `<li style="--team:${team.color}"><b>${ranked.placements[id]}.</b><img src="${team.logo}" alt=""><strong>${team.marker} ${team.name}</strong><span>${game.publicResults[id].balloons} Ballons${final ? ` · +${Number(game.points?.[id] || 0)}` : ""}</span></li>`; });
+  TEAMS.filter(team => !played.has(team.id)).forEach(team => rows.push(`<li class="pending" style="--team:${team.color}"><b>–</b><img src="${team.logo}" alt=""><strong>${team.marker} ${team.name}</strong><span>noch nicht gespielt</span></li>`));
+  return `<ol class="balloon-tv-ranking">${rows.join("")}</ol>`;
+}
+
+function formatCountdown(ms) { const seconds = Math.max(0, Math.ceil(Number(ms || 0) / 1000)); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
+setInterval(() => { if (currentState) renderBalloonMonster(currentState); }, 250);
 
 function renderBeerPong(state, totals) {
   const game = state.games?.[BEER_PONG.id], tournamentVisible = game?.status === "running" || (game?.status === "completed" && !game.finalReveal);

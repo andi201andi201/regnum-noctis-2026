@@ -51,6 +51,8 @@ Der Workflow in `.github/workflows/pages.yml` veröffentlicht `main` automatisch
 - `novitiusAnswers/{uid}/question-{nr}`: genau eine geschützte Antwort pro Person und Frage; nach der Auflösung inklusive 3/2/1/0-Punkten
 - `novitiusSubmissions/question-{nr}/{uid}`: öffentlicher Abgabemarker ohne Antwortinhalt für Live-Zähler und TV
 - `novitiusAdmin/questions`: geschützter Fragenkatalog mit Lösungen und drei Toleranzbereichen
+- `games/ballon-monster`: öffentlicher Spielstatus, serverseitige Auslosung, synchroner Timer, freigegebene Resultate und Endwertung
+- `balloonMonsterAdmin`: geschützter Ballonvorrat und Ergebnisentwürfe; unveröffentlichte Zahlen sind öffentlich nicht lesbar
 - `games/game-challenges`: öffentlicher Status, Timer, Rotation, freigegebene Runden und Endwertung der fünf Stationen
 - `gameChallengesAdmin`: geschützte Rohresultate, Schätzfragen, Lösungen und Schätzungen aller Reiche
 - `games/beer-pong`: öffentlicher Turnierstatus, veröffentlichte Matches, Gruppenrangliste, KO-Phase, Endrang und Enthüllungsstatus
@@ -62,6 +64,31 @@ Der Workflow in `.github/workflows/pages.yml` veröffentlicht `main` automatisch
 - `admins/{uid}`: Freigabe für Schreibzugriff
 
 Die Gesamtpunkte werden aus allen Spielresultaten berechnet. Korrekturen wirken dadurch sofort und ohne separate Summenpflege.
+
+## Ballon-Monster
+
+Das Eröffnungsspiel läuft unter `games/ballon-monster`. Die Spielleitung legt
+vor dem Start den identischen Ballonvorrat pro Reich fest. Jede Auslosung wird
+atomar direkt am öffentlichen Spielzustand ausgeführt; bereits gezogene Reiche
+werden aus dem Glücksrad entfernt und können deshalb auch bei gleichzeitigen
+Adminaktionen nicht doppelt gezogen werden. Das letzte verbleibende Reich wird
+automatisch angekündigt. Die TV-Ansicht zeigt Glücksrad, Auslosung,
+90-Sekunden-Countdown, Parcoursphase und das jeweils veröffentlichte Resultat.
+
+Der Countdown basiert auf einem gespeicherten Ablaufzeitpunkt und läuft daher
+nach einem Neuladen korrekt weiter. Pause, Fortsetzen, Zurücksetzen,
+Auslosung zurücknehmen und Durchgang abbrechen sind im Adminbereich kontrolliert
+möglich. Resultate landen zuerst nur als geschützte Entwürfe unter
+`balloonMonsterAdmin`; erst die separate Veröffentlichung aktualisiert TV und
+Spielrangliste. Noch nicht gespielte Reiche werden dort nicht mit null gewertet.
+
+Nach fünf veröffentlichten Resultaten bestätigt die Spielleitung die
+Endrangliste. Gleiche Ballonzahlen teilen sich Rang und Tagespunkte, der nächste
+Rang wird übersprungen. Der Abschluss schreibt 5 / 4 / 3 / 2 / 1 in denselben
+Spieleintrag. Spätere veröffentlichte Korrekturen ersetzen Resultat und Punkte
+vollständig, sodass keine doppelte Buchung möglich ist. Auf den Handys erscheint
+während des Spiels nur der kompakte Hinweis auf den Grossbildschirm; danach ist
+die endgültige Rangliste in der Chronik sichtbar.
 
 ## Song Battle
 
