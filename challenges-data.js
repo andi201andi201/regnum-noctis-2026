@@ -18,8 +18,8 @@ export const CHALLENGE_STATIONS = [
 ];
 
 export const GAME_CHALLENGE_DEFAULT_ESTIMATES = {
-  "estimate-1": estimateQuestion(1, "Wie viele Schrauben befinden sich im Glas?", "Stück"),
-  "estimate-2": estimateQuestion(2, "Wie viele Gegenstände befinden sich im Behälter?", "Stück"),
+  "estimate-1": estimateQuestion(1, "Wie viele Pilze befinden sich im Glas?", "Stück"),
+  "estimate-2": estimateQuestion(2, "Wie viele Maiskörner befinden sich im Behälter?", "Stück"),
   "estimate-3": estimateQuestion(3, "Wie schwer ist der Gegenstand?", "g")
 };
 
