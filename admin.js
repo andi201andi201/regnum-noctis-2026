@@ -1,6 +1,6 @@
-import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking } from "./data.js?v=hunt-3";
-import { getStore } from "./store.js?v=hunt-3";
-import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=hunt-3";
+import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=novitius-2";
+import { getStore } from "./store.js?v=novitius-2";
+import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=novitius-2";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -67,9 +67,9 @@ $("#finishSongBattle").addEventListener("click", async () => {
 });
 
 $("#novitiusRoundSelect").innerHTML = Array.from({ length: NOVITIUS_GAME.questionCount }, (_, index) => `<option value="${index + 1}">Frage ${index + 1} von ${NOVITIUS_GAME.questionCount}</option>`).join("");
-$("#novitiusThresholdInputs").innerHTML = [5, 4, 3, 2, 1].map((points, index) => `<label>${points} Punkte<input id="novitius-threshold-${index}" type="number" min="0" step="any" required></label>`).join("");
+$("#novitiusThresholdInputs").innerHTML = [3, 2, 1].map((points, index) => `<label>${points} Punkte<input id="novitius-threshold-${index}" type="number" min="0" step="any" required></label>`).join("");
 $("#startNovitius").addEventListener("click", async () => {
-  if (!confirm("Anmeldung für «Wer kennt den Novitius?» jetzt öffnen?")) return;
+  if (!confirm("«Wer kennt den Novitius?» starten und die Anmeldung öffnen?")) return;
   await withDisabled($("#startNovitius"), async () => { await store.startNovitiusGame(); toast("Anmeldung geöffnet"); });
 });
 $("#resetNovitius").addEventListener("click", async () => {
@@ -77,7 +77,7 @@ $("#resetNovitius").addEventListener("click", async () => {
   await withDisabled($("#resetNovitius"), async () => { await store.resetNovitiusGame(); novitiusReviewNumber = 1; toast("Novitius-Spiel zurückgesetzt"); });
 });
 $("#openNovitiusRegistration").addEventListener("click", async () => { try { await store.setNovitiusRegistration(true); toast("Anmeldung offen"); } catch (error) { toast(error.message); } });
-$("#closeNovitiusRegistration").addEventListener("click", async () => { try { await store.setNovitiusRegistration(false); toast("Teilnehmerliste geschlossen"); } catch (error) { toast(error.message); } });
+$("#closeNovitiusRegistration").addEventListener("click", async () => { try { await store.setNovitiusRegistration(false); toast("Teilnehmerliste und Teamgrössen fixiert"); } catch (error) { toast(error.message); } });
 $("#novitiusRoundSelect").addEventListener("change", event => { novitiusReviewNumber = Number(event.target.value); if (currentState?.games?.[NOVITIUS_GAME.id]?.status === "completed") renderNovitiusAdmin(currentState); });
 $("#startNovitiusQuestion").addEventListener("click", () => startNovitiusRound(Number($("#novitiusRoundSelect").value)));
 $("#nextNovitiusQuestion").addEventListener("click", () => { const current = Number(currentState?.games?.[NOVITIUS_GAME.id]?.currentQuestion || 0); if (current < NOVITIUS_GAME.questionCount) startNovitiusRound(current + 1); });
@@ -88,6 +88,18 @@ $("#revealNovitiusQuestion").addEventListener("click", async () => {
   try { await store.revealNovitiusQuestion(novitiusReviewNumber); toast(`Frage ${novitiusReviewNumber} aufgelöst`); }
   catch (error) { toast(error.message); }
   finally { button.disabled = false; }
+});
+$("#novitiusLiveResultForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  try { await store.setNovitiusLiveResult($("#novitiusLiveResult").value); toast("Tatsächliches Ergebnis gespeichert"); }
+  catch (error) { toast(error.message); }
+});
+$("#novitiusTieForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const teamIds = [...$("#novitiusTieAnswers").querySelectorAll("input[data-tie-team]")].map(input => input.dataset.tieTeam);
+  const answers = Object.fromEntries(teamIds.map(id => [id, Number($("#novitiusTieAnswers").querySelector(`[data-tie-team="${id}"]`).value)]));
+  try { await store.saveNovitiusTieBreak({ question: $("#novitiusTieQuestion").value, correctValue: Number($("#novitiusTieCorrect").value), teamIds, answers }); toast("Stechen ausgewertet · Resultat kann abgeschlossen werden"); }
+  catch (error) { toast(error.message); }
 });
 $("#finishNovitius").addEventListener("click", async () => {
   const button = $("#finishNovitius"); button.disabled = true; $("#novitiusFinishMessage").textContent = "";
@@ -101,6 +113,15 @@ $("#novitiusParticipantList").addEventListener("click", async event => {
   if (!confirm(`${participant?.playerName || "Teilnehmende Person"} entfernen? Alle Antworten dieser Person werden gelöscht.`)) return;
   await store.removeNovitiusParticipant(button.dataset.novitiusRemove); toast("Teilnehmende Person entfernt");
 });
+$("#novitiusAdminAnswers").addEventListener("click", async event => {
+  const button = event.target.closest("button[data-novitius-correct]"); if (!button) return;
+  const [participantId, questionNumber] = button.dataset.novitiusCorrect.split("|");
+  const input = event.target.closest("div").querySelector("input");
+  const question = novitiusAdmin.questions?.[`question-${questionNumber}`];
+  const value = question?.type === "time" ? input.value : Number(input.value);
+  try { await store.correctNovitiusAnswer(participantId, Number(questionNumber), value); toast("Antwort korrigiert und Wertung neu berechnet"); }
+  catch (error) { toast(error.message); }
+});
 $("#novitiusQuestionList").addEventListener("click", event => { const button = event.target.closest("button[data-novitius-edit]"); if (button) openNovitiusQuestionEditor(Number(button.dataset.novitiusEdit)); });
 $("#cancelNovitiusQuestion").addEventListener("click", () => $("#novitiusQuestionForm").classList.add("hidden"));
 $("#novitiusQuestionType").addEventListener("change", updateNovitiusCorrectInput);
@@ -108,7 +129,7 @@ $("#novitiusQuestionForm").addEventListener("submit", async event => {
   event.preventDefault(); $("#novitiusQuestionMessage").textContent = "";
   const number = Number($("#novitiusQuestionNumber").value);
   try {
-    await store.saveNovitiusQuestion(number, { text: $("#novitiusQuestionText").value, type: $("#novitiusQuestionType").value, unit: $("#novitiusQuestionUnit").value, correctValue: $("#novitiusCorrectValue").value, thresholds: [0,1,2,3,4].map(index => Number($(`#novitius-threshold-${index}`).value)), liveAnswer: $("#novitiusLiveAnswer").checked });
+    await store.saveNovitiusQuestion(number, { text: $("#novitiusQuestionText").value, type: $("#novitiusQuestionType").value, scoreMode: $("#novitiusScoreMode").value, unit: $("#novitiusQuestionUnit").value, correctValue: $("#novitiusCorrectValue").value, thresholds: [0,1,2].map(index => Number($(`#novitius-threshold-${index}`).value)), liveAnswer: $("#novitiusLiveAnswer").checked });
     $("#novitiusQuestionForm").classList.add("hidden"); toast(`Frage ${number} gespeichert`);
   } catch (error) { $("#novitiusQuestionMessage").textContent = error.message; }
 });
@@ -320,29 +341,68 @@ function renderNovitiusAdmin(state) {
   $("#novitiusParticipantCount").textContent = `${participants.length} angemeldet`;
   $("#novitiusParticipantList").innerHTML = participants.length ? participants.sort(([, a], [, b]) => a.teamId.localeCompare(b.teamId) || a.playerName.localeCompare(b.playerName)).map(([id, participant]) => {
     const team = TEAMS.find(item => item.id === participant.teamId);
-    return `<span style="--team:${team?.color || "#888"}"><i></i>${escapeHtml(participant.playerName)} · ${team?.marker || ""} ${team?.name || participant.teamId}<button type="button" data-novitius-remove="${id}">×</button></span>`;
+    return `<span style="--team:${team?.color || "#888"}"><i></i>${escapeHtml(participant.playerName)} · ${team?.marker || ""} ${team?.name || participant.teamId}${game.participantsLocked ? "" : `<button type="button" data-novitius-remove="${id}">×</button>`}</span>`;
   }).join("") : '<p class="save-message">Noch niemand angemeldet.</p>';
   $("#openNovitiusRegistration").classList.toggle("hidden", !running || Number(game.currentQuestion || 0) > 0 || game.registrationOpen);
   $("#closeNovitiusRegistration").classList.toggle("hidden", !running || Number(game.currentQuestion || 0) > 0 || !game.registrationOpen);
   $("#novitiusRoundSelect").value = String(novitiusReviewNumber);
-  $("#startNovitiusQuestion").classList.toggle("hidden", !running);
-  $("#nextNovitiusQuestion").classList.toggle("hidden", !running || !game.currentQuestion || Number(game.currentQuestion) >= NOVITIUS_GAME.questionCount);
+  const currentKey = `question-${game.currentQuestion || 0}`, currentQuestionState = game.questionStates?.[currentKey] || "locked";
+  $("#startNovitiusQuestion").classList.toggle("hidden", !running || (!!game.currentQuestion && currentQuestionState !== "revealed"));
+  $("#nextNovitiusQuestion").classList.toggle("hidden", !running || !game.currentQuestion || currentQuestionState !== "revealed" || Number(game.currentQuestion) >= NOVITIUS_GAME.questionCount);
   $("#novitiusAnswerControls").classList.toggle("hidden", !running || !game.currentQuestion);
-  $("#openNovitiusAnswers").classList.toggle("hidden", !running || !game.currentQuestion || game.answersOpen || game.revealedQuestions?.[`question-${game.currentQuestion}`]);
+  $("#openNovitiusAnswers").classList.add("hidden");
   $("#closeNovitiusAnswers").classList.toggle("hidden", !running || !game.currentQuestion || !game.answersOpen);
-  $("#revealNovitiusQuestion").classList.toggle("hidden", !running || !game.currentQuestion || game.answersOpen);
+  $("#revealNovitiusQuestion").classList.toggle("hidden", !running || !game.currentQuestion || currentQuestionState !== "closed");
 
   const key = `question-${novitiusReviewNumber}`;
-  const submitted = participants.filter(([id]) => novitiusAnswers?.[id]?.[key]).length;
-  $("#novitiusRoundStatus").textContent = completed ? "Abgeschlossen · Fragen und Resultat können weiterhin kontrolliert werden." : game.currentQuestion ? `Frage ${game.currentQuestion} von ${NOVITIUS_GAME.questionCount} · ${game.answersOpen ? "Antworten offen" : "Antworten geschlossen"} · ${submitted}/${participants.length} abgegeben` : `Anmeldung ${game.registrationOpen ? "offen" : "geschlossen"} · danach Frage 1 starten`;
+  const markers = state.novitiusSubmissions?.[key] || {}, submitted = Object.keys(markers).length;
+  const stateLabels = { locked: "gesperrt", open: "offen", closed: "geschlossen", revealed: "aufgelöst" };
+  $("#novitiusRoundStatus").textContent = completed ? "Abgeschlossen · Korrekturen aktualisieren die Tagespunkte." : game.currentQuestion ? `Frage ${game.currentQuestion} von ${NOVITIUS_GAME.questionCount} · ${stateLabels[currentQuestionState]} · ${submitted}/${participants.length} abgegeben` : `Anmeldung ${game.registrationOpen ? "offen" : "geschlossen"} · danach Frage 1 freigeben`;
+  $("#novitiusTeamSubmissions").innerHTML = TEAMS.map(team => {
+    const count = Object.values(markers).filter(marker => marker.teamId === team.id).length;
+    const eligible = game.participantsLocked ? Number(game.teamSizes?.[team.id] || 0) : participants.filter(([, participant]) => participant.teamId === team.id).length;
+    return `<div style="--team:${team.color}"><span>${team.marker} ${team.name}</span><strong>${count} / ${eligible}</strong></div>`;
+  }).join("");
   const reviewedQuestion = novitiusAdmin.questions?.[key];
   $("#novitiusAdminAnswers").innerHTML = game.currentQuestion ? participants.map(([id, participant]) => {
     const team = TEAMS.find(item => item.id === participant.teamId), answer = novitiusAnswers?.[id]?.[key];
-    return `<div style="--team:${team?.color || "#888"}"><span>${team?.marker || ""} ${escapeHtml(participant.playerName)}</span><strong>${answer ? escapeHtml(formatNovitiusValue(answer.value, reviewedQuestion?.unit || game.currentQuestionData?.unit)) : "–"}</strong></div>`;
+    const inputType = reviewedQuestion?.type === "time" ? "time" : "number", step = inputType === "time" ? "60" : "1";
+    return `<div style="--team:${team?.color || "#888"}"><span>${team?.marker || ""} ${escapeHtml(participant.playerName)}</span><input type="${inputType}" step="${step}" value="${escapeAttribute(answer?.value ?? "")}" aria-label="Antwort ${escapeAttribute(participant.playerName)}"><button type="button" data-novitius-correct="${id}|${novitiusReviewNumber}">Korrigieren</button></div>`;
   }).join("") : "";
-  const finalReady = completed || (Number(game.currentQuestion) === NOVITIUS_GAME.questionCount && !game.answersOpen);
+  const liveResultNeeded = running && Number(game.currentQuestion) === 10 && currentQuestionState === "closed" && (novitiusAdmin.questions?.["question-10"]?.correctValue === "" || novitiusAdmin.questions?.["question-10"]?.correctValue === null || novitiusAdmin.questions?.["question-10"]?.correctValue === undefined);
+  $("#novitiusLiveResultForm").classList.toggle("hidden", !liveResultNeeded);
+  if (!liveResultNeeded && novitiusAdmin.liveResult !== null && novitiusAdmin.liveResult !== undefined) $("#novitiusLiveResult").value = novitiusAdmin.liveResult;
+  const finalReady = completed || !!game.revealedQuestions?.["question-10"];
   $("#novitiusFinalisation").classList.toggle("hidden", !finalReady);
   $("#finishNovitius").textContent = completed ? "Resultat neu berechnen" : "Spiel abschliessen · Punkte vergeben";
+  renderNovitiusTieBreak(game, finalReady);
+}
+
+function renderNovitiusTieBreak(game, finalReady) {
+  if (!finalReady || game?.tieBreak?.ranking?.length) { $("#novitiusTieBreak").classList.add("hidden"); return; }
+  const standings = calculateNovitiusStandings(game), groups = novitiusTieGroups(standings.internalPoints, standings.perfectRates);
+  const teamIds = [...new Set(groups.flatMap(group => group.teamIds))];
+  $("#novitiusTieBreak").classList.toggle("hidden", !teamIds.length);
+  if (!teamIds.length) return;
+  $("#novitiusTieHelp").textContent = `⚠️ Gleichstand nach Spielpunkten und normalisierten Volltreffern: ${teamIds.map(id => TEAMS.find(team => team.id === id)?.name).join(", ")}`;
+  $("#novitiusTieAnswers").innerHTML = teamIds.map(id => { const team = TEAMS.find(item => item.id === id); return `<label>${team.marker} ${team.name}<input data-tie-team="${id}" type="number" step="any" required></label>`; }).join("");
+}
+
+function calculateNovitiusStandings(game) {
+  const totals = Object.fromEntries(TEAMS.map(team => [team.id, 0])), perfects = Object.fromEntries(TEAMS.map(team => [team.id, 0]));
+  Object.entries(novitiusParticipants).forEach(([participantId, participant]) => {
+    for (let number = 1; number <= NOVITIUS_GAME.questionCount; number += 1) {
+      const answer = novitiusAnswers?.[participantId]?.[`question-${number}`], question = novitiusAdmin.questions?.[`question-${number}`];
+      if (!answer || !question) continue;
+      const points = scoreNovitiusAnswer(question, answer.value).points;
+      totals[participant.teamId] += points;
+      if (points === 3) perfects[participant.teamId] += 1;
+    }
+  });
+  return {
+    internalPoints: Object.fromEntries(TEAMS.map(team => [team.id, Number(game?.teamSizes?.[team.id] || 0) ? totals[team.id] / Number(game.teamSizes[team.id]) : 0])),
+    perfectRates: Object.fromEntries(TEAMS.map(team => [team.id, Number(game?.teamSizes?.[team.id] || 0) ? perfects[team.id] / Number(game.teamSizes[team.id]) : 0]))
+  };
 }
 
 function renderNovitiusQuestionList() {
@@ -359,9 +419,10 @@ function openNovitiusQuestionEditor(number) {
   $("#novitiusQuestionNumber").value = number;
   $("#novitiusQuestionText").value = question.text || "";
   $("#novitiusQuestionType").value = question.type || "number";
+  $("#novitiusScoreMode").value = question.scoreMode || (question.type === "time" ? "time" : "absolute");
   $("#novitiusQuestionUnit").value = question.unit || "";
   $("#novitiusCorrectValue").value = question.correctValue ?? "";
-  [0,1,2,3,4].forEach(index => { $(`#novitius-threshold-${index}`).value = Number(question.thresholds?.[index] || 0); });
+  [0,1,2].forEach(index => { $(`#novitius-threshold-${index}`).value = Number(question.thresholds?.[index] || 0); });
   $("#novitiusLiveAnswer").checked = !!question.liveAnswer;
   updateNovitiusCorrectInput();
   $("#novitiusQuestionForm").classList.remove("hidden");
@@ -372,10 +433,12 @@ function updateNovitiusCorrectInput() {
   const time = $("#novitiusQuestionType").value === "time";
   $("#novitiusCorrectValue").type = time ? "time" : "number";
   $("#novitiusCorrectValue").step = time ? "60" : "any";
+  if (time) $("#novitiusScoreMode").value = "time";
 }
 
 function formatNovitiusValue(value, unit = "") {
-  return `${value}${unit ? ` ${unit}` : ""}`;
+  const formatted = typeof value === "number" ? new Intl.NumberFormat("de-CH", { maximumFractionDigits: 2 }).format(value) : value;
+  return `${formatted}${unit ? ` ${unit}` : ""}`;
 }
 
 function renderHuntAdmin(state) {

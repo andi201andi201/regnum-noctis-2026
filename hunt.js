@@ -1,7 +1,7 @@
-import { TEAMS, formatTime } from "./data.js?v=hunt-3";
-import { getStore } from "./store.js?v=hunt-3";
+import { TEAMS, formatTime } from "./data.js?v=novitius-2";
+import { getStore } from "./store.js?v=novitius-2";
 import { getPlayerProfile } from "./player.js";
-import { HUNT_POINTS_PER_OBJECT, huntFinds, huntProgress } from "./hunt-data.js?v=hunt-3";
+import { HUNT_POINTS_PER_OBJECT, huntFinds, huntProgress } from "./hunt-data.js?v=novitius-2";
 
 const $ = selector => document.querySelector(selector);
 const DETECTION_HOLD_MS = 950;

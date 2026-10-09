@@ -1,5 +1,5 @@
-import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=hunt-3";
-import { getStore } from "./store.js?v=hunt-3";
+import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=novitius-2";
+import { getStore } from "./store.js?v=novitius-2";
 import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js";
 
 const $ = selector => document.querySelector(selector);
@@ -222,7 +222,7 @@ function renderGameResult(game) {
     return `<article class="result-row song-public-result novitius-public-result"><div class="result-title"><span>${formatTime(game.createdAt, true)}</span><strong>WER KENNT DEN NOVITIUS? – RESULTAT</strong><small>Teamwertung: Durchschnitt aller angemeldeten Personen</small><ol>${(game.ranking || []).map((teamId, index) => {
       const team = TEAMS.find(item => item.id === teamId);
       const place = Number(game.placements?.[teamId] || index + 1);
-      return `<li style="--team:${team?.color || "#888"}"><b>${place}. ${place === 1 ? "🏆 " : ""}${team?.marker || ""} ${escapeHtml(team?.name || teamId)}</b><span>Ø ${formatAverage(game.internalPoints?.[teamId])}/50 · +${Number(game.points?.[teamId] || 0)}</span></li>`;
+      return `<li style="--team:${team?.color || "#888"}"><b>${place}. ${place === 1 ? "🏆 " : ""}${team?.marker || ""} ${escapeHtml(team?.name || teamId)}</b><span>Ø ${formatAverage(game.internalPoints?.[teamId])}/30 · +${Number(game.points?.[teamId] || 0)}</span></li>`;
     }).join("")}</ol></div></article>`;
   }
   return `<article class="result-row"><div class="result-title"><span>${formatTime(game.createdAt, true)}</span><strong>${escapeHtml(game.name)}</strong><small>${escapeHtml([game.round, game.resultText].filter(Boolean).join(" · "))}</small></div><div class="point-chips">${pointChips(game.points)}</div></article>`;

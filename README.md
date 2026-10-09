@@ -48,8 +48,9 @@ Der Workflow in `.github/workflows/pages.yml` veröffentlicht `main` automatisch
 - `songBattleParticipants/{teamId}`: reserviert die Eingabe für genau eine Person beziehungsweise ein Gerät pro Reich
 - `songBattleAdmin`: geschützte manuelle Bewertungen und interne Song-Battle-Punkte
 - `novitiusParticipants/{uid}`: individuelle Anmeldung mit Name und Reich
-- `novitiusAnswers/{uid}/question-{nr}`: eigene, bis zur Sperre änderbare Antworten
-- `novitiusAdmin/questions`: geschützter Fragenkatalog mit Lösungen und Toleranzbereichen
+- `novitiusAnswers/{uid}/question-{nr}`: genau eine geschützte Antwort pro Person und Frage; nach der Auflösung inklusive 3/2/1/0-Punkten
+- `novitiusSubmissions/question-{nr}/{uid}`: öffentlicher Abgabemarker ohne Antwortinhalt für Live-Zähler und TV
+- `novitiusAdmin/questions`: geschützter Fragenkatalog mit Lösungen und drei Toleranzbereichen
 - `settings/hunt`: öffentlicher Nachtjagd-Status und die für die laufende Runde eingefrorenen Hinweise
 - `huntAdmin/targets`: geschützte Bearbeitung der internen Namen, KI-Erkennungsziele und Hinweise
 - `games/hunt-{runde}-{reich}-{gegenstand}`: atomarer, eindeutig adressierter Fund mit genau einem Tagespunkt
@@ -82,23 +83,32 @@ Antworten und Bewertungen bleiben bis zu einem bewussten Zurücksetzen erhalten.
 Das Spiel läuft unter `games/novitius-quiz`. Beim Start wird zuerst die
 Anmeldung geöffnet. Jede Person nimmt auf dem eigenen Handy mit ihrem bereits
 gewählten Namen und Reich teil. Sobald Frage 1 gestartet wird, ist die
-Teilnehmerliste geschlossen. Pro Frage kann die Antwort bis zur Sperre beliebig
-geändert werden. Zahlen werden als Zahlen gespeichert; Uhrzeiten werden über
-ein einheitliches Uhrzeitfeld eingegeben und auch über Mitternacht korrekt
+Teilnehmerliste geschlossen und die Teamgrösse als fester Divisor gespeichert.
+Pro Frage darf jede Person genau eine Antwort absenden. Diese Antwort ist sofort
+endgültig; nur die Spielleitung kann technische Fehler im Adminbereich
+korrigieren. Zahlen werden als nicht negative Ganzzahlen gespeichert, Uhrzeiten
+über ein einheitliches HH:MM-Feld eingegeben und auch über Mitternacht korrekt
 verglichen.
 
-Die zehn Fragen, Simons korrekte Antworten sowie fünf aufsteigende
-Toleranzbereiche für 5 bis 1 Punkt können im Adminbereich bearbeitet werden.
-Beim Live-Test wird die korrekte Antwort erst kurz vor der Auflösung ergänzt.
-Nach dem Sperren veröffentlicht **Frage auflösen** Simons Antwort, die eigene
-Punktzahl und eine Top 10 aller eingegangenen Antworten. Fehlende Antworten
-zählen als null Punkte.
+Die zehn Fragen, Simons korrekte Antworten sowie drei aufsteigende
+Toleranzbereiche für 3, 2 und 1 Punkt können im Adminbereich bearbeitet werden.
+Frage 3 wird prozentual und Frage 8 als Uhrzeit bewertet. Beim Gummibärchen-
+Livetest wird das tatsächliche Ergebnis erst nach dem Schliessen von Frage 10
+eingetragen. **Lösung anzeigen** veröffentlicht erst danach Simons Antwort, die
+eigene Punktzahl, den eigenen Teamwert der Runde und die interne Rangliste.
+Fremde Einzelantworten werden nicht veröffentlicht. Fehlende Antworten zählen
+als null Punkte.
 
-Für die Teamwertung wird der Durchschnitt der persönlichen Gesamtpunkte aller
-angemeldeten Personen eines Reichs verwendet. Dadurch entsteht kein Vorteil
-durch eine grössere Teilnehmerzahl. Gleichstände teilen sich den Platz und die
-zugehörigen Gesamtpunkte. Das erneute Abschliessen nach einer Korrektur ersetzt
-das feste Spielresultat, anstatt weitere Punkte zu addieren.
+Für jede Frage wird die Summe der individuellen Punkte durch die beim Start
+fixierte Teamgrösse geteilt. Über zehn Fragen sind so maximal 30.00 interne
+Punkte pro Reich möglich. Bei einem exakten Endgleichstand entscheidet zuerst
+die auf Teamgrösse normalisierte Zahl der 3-Punkte-Antworten und danach bei
+Bedarf eine zusätzliche Stechfrage im Adminbereich. Erst der Abschluss schreibt
+5 / 4 / 3 / 2 / 1 in die Tagesrangliste. Ein erneuter Abschluss oder eine
+Korrektur ersetzt denselben Spieleintrag und erzeugt keine doppelten Punkte.
+
+Die TV-Ansicht zeigt während einer offenen Frage nur Frage und Abgabezahl. Nach
+der bewussten Auflösung erscheinen richtige Antwort und aktuelle Teamrangliste.
 
 ## Nachtjagd
 

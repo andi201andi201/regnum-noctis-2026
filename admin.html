@@ -5,7 +5,7 @@
   <meta name="theme-color" content="#08090d"><title>Admin · Regnum Noctis</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=hunt-3">
+  <link rel="stylesheet" href="styles.css?v=novitius-2">
 </head>
 <body class="admin-page">
   <div class="stars" aria-hidden="true"></div>
@@ -48,7 +48,7 @@
       <section id="novitiusAdminPanel" class="panel novitius-admin-panel">
         <div class="panel-title"><div><p class="eyebrow">Vormittag · ca. 15 Minuten</p><h2>Wer kennt den Novitius?</h2></div><span id="novitiusAdminStatus" class="save-message">Noch nicht gestartet</span></div>
         <p class="save-message">10 Schätzfragen über Simon · jede Person spielt für ihr Reich.</p>
-        <div class="hunt-admin-actions"><button id="startNovitius" class="primary-button" type="button">Anmeldung starten</button><button id="resetNovitius" class="text-button hidden" type="button">Zurücksetzen</button></div>
+        <div class="hunt-admin-actions"><button id="startNovitius" class="primary-button" type="button">Spiel und Anmeldung starten</button><button id="resetNovitius" class="text-button hidden" type="button">Zurücksetzen</button></div>
 
         <div id="novitiusControls" class="hidden">
           <div id="novitiusRegistrationControls" class="novitius-registration-admin">
@@ -63,8 +63,11 @@
           </div>
           <div id="novitiusAnswerControls" class="hunt-admin-actions"><button id="openNovitiusAnswers" class="primary-button" type="button">Antworten öffnen</button><button id="closeNovitiusAnswers" class="secondary-button" type="button">Antworten sperren</button><button id="revealNovitiusQuestion" class="primary-button hidden" type="button">Frage auflösen</button></div>
           <p id="novitiusRoundStatus" class="save-message"></p>
+          <div id="novitiusTeamSubmissions" class="novitius-team-submissions"></div>
+          <form id="novitiusLiveResultForm" class="novitius-live-result hidden"><label>Tatsächliches Ergebnis Frage 10<input id="novitiusLiveResult" type="number" min="0" step="1" required></label><button class="secondary-button" type="submit">Ergebnis speichern</button></form>
           <div id="novitiusAdminAnswers" class="novitius-admin-answers"></div>
-          <div id="novitiusFinalisation" class="song-finalisation hidden"><p class="save-message">Die Teamwertung basiert auf dem Durchschnitt aller angemeldeten Personen. Fehlende Antworten zählen mit 0 Punkten.</p><button id="finishNovitius" class="primary-button" type="button">Spiel abschliessen · Punkte vergeben</button><p id="novitiusFinishMessage" class="form-error"></p></div>
+          <div id="novitiusTieBreak" class="novitius-tie-break hidden"><p class="eyebrow">Gleichstand</p><h3>Stechfrage</h3><p id="novitiusTieHelp" class="save-message"></p><form id="novitiusTieForm"><label>Stechfrage<input id="novitiusTieQuestion" maxlength="180" required></label><label>Richtige Lösung<input id="novitiusTieCorrect" type="number" step="any" required></label><div id="novitiusTieAnswers"></div><button class="secondary-button" type="submit">Stechen auswerten</button></form></div>
+          <div id="novitiusFinalisation" class="song-finalisation hidden"><p class="save-message">Teamwertung: Durchschnitt der beim Start fixierten Teamgrösse. Fehlende Antworten zählen mit 0 Punkten.</p><button id="finishNovitius" class="primary-button" type="button">Spiel abschliessen · Punkte vergeben</button><p id="novitiusFinishMessage" class="form-error"></p></div>
         </div>
 
         <div class="novitius-question-editor-wrap">
@@ -73,7 +76,7 @@
           <form id="novitiusQuestionForm" class="hidden">
             <input id="novitiusQuestionNumber" type="hidden">
             <label>Frage<input id="novitiusQuestionText" type="text" maxlength="180" required></label>
-            <div class="form-grid"><label>Antworttyp<select id="novitiusQuestionType"><option value="number">Zahl</option><option value="time">Uhrzeit</option></select></label><label>Einheit<input id="novitiusQuestionUnit" type="text" maxlength="30" placeholder="z. B. Minuten"></label></div>
+            <div class="form-grid"><label>Antworttyp<select id="novitiusQuestionType"><option value="number">Zahl</option><option value="time">Uhrzeit</option></select></label><label>Bewertung<select id="novitiusScoreMode"><option value="absolute">Absolute Abweichung</option><option value="percentage">Prozentuale Abweichung</option><option value="time">Zeitliche Abweichung</option></select></label><label>Einheit<input id="novitiusQuestionUnit" type="text" maxlength="30" placeholder="z. B. Minuten"></label></div>
             <label>Simons korrekte Antwort<input id="novitiusCorrectValue" type="number" step="any" placeholder="Kann beim Livetest später eingetragen werden"></label>
             <fieldset><legend>Maximale Abweichung pro Punktestufe</legend><div id="novitiusThresholdInputs" class="novitius-threshold-inputs"></div></fieldset>
             <label class="novitius-checkbox"><input id="novitiusLiveAnswer" type="checkbox"> Korrekte Antwort wird erst live ermittelt</label>
@@ -122,6 +125,6 @@
     </div>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="admin.js?v=hunt-3"></script>
+  <script type="module" src="admin.js?v=novitius-2"></script>
 </body>
 </html>

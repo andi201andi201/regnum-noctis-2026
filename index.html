@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=hunt-3">
+  <link rel="stylesheet" href="styles.css?v=novitius-2">
 </head>
 <body>
   <div class="stars" aria-hidden="true"></div>
@@ -86,15 +86,15 @@
       <section id="novitiusCard" class="novitius-card hidden" aria-labelledby="novitiusName" aria-live="polite">
         <div class="hunt-topline"><span>Vormittag · ca. 15 Minuten</span><strong id="novitiusPublicStatus">Anmeldung offen</strong></div>
         <div class="novitius-content">
-          <p class="eyebrow">Aktuelles Spiel</p><h2 id="novitiusName">Wer kennt den Novitius?</h2>
-          <p class="novitius-intro">Wie gut kennst du Simon? Jede Person spielt selbst; für die Teamwertung zählt der Durchschnitt aller Teilnehmenden.</p>
+          <p class="eyebrow">Aktuelles Spiel</p><h2 id="novitiusName">🧠 Wer kennt den Novitius?</h2>
+          <p class="novitius-intro">Jede Person schätzt selbst. Fehlende Antworten zählen mit 0; für jedes Reich zählt der Durchschnitt der beim Start angemeldeten Personen.</p>
 
           <div id="novitiusRegistration" class="novitius-registration hidden">
-            <strong>Jetzt zum Quiz anmelden</strong>
-            <p>Nach dem Start von Frage 1 ist keine Anmeldung mehr möglich.</p>
+            <strong>Jetzt als spielberechtigte Person anmelden</strong>
+            <p>Mit Frage 1 wird die Teamgrösse fixiert. Danach ist keine Anmeldung mehr möglich.</p>
             <button id="joinNovitius" class="primary-button" type="button">Mitspielen</button>
           </div>
-          <div id="novitiusRegistered" class="novitius-registered hidden">✓ Du bist angemeldet. Warte auf Frage 1.</div>
+          <div id="novitiusRegistered" class="novitius-registered hidden">✓ Du bist angemeldet. Warte auf die nächste Frage.</div>
           <div id="novitiusSpectator" class="song-answer-closed hidden">Die Anmeldung ist geschlossen. Du kannst die Auflösungen mitverfolgen.</div>
 
           <div id="novitiusQuestionView" class="hidden">
@@ -104,7 +104,7 @@
               <label>Deine Schätzung<div class="novitius-answer-row"><input id="novitiusAnswer" required><span id="novitiusUnit"></span></div></label>
               <button id="saveNovitiusAnswer" class="primary-button" type="submit">Antwort speichern</button>
             </form>
-            <div id="novitiusSaved" class="song-answer-saved hidden">✓ Antwort gespeichert <small>Du kannst sie ändern, solange die Frage offen ist.</small></div>
+            <div id="novitiusSaved" class="song-answer-saved hidden">✓ Antwort gespeichert <small id="novitiusSavedValue">Deine Antwort ist endgültig und kann nicht mehr geändert werden.</small></div>
             <div id="novitiusClosed" class="song-answer-closed hidden">🔒 Antworten geschlossen</div>
             <p id="novitiusMessage" class="form-error" role="status"></p>
           </div>
@@ -113,8 +113,9 @@
             <p class="eyebrow">Auflösung</p>
             <h3 id="novitiusSolution"></h3>
             <div id="novitiusOwnResult" class="novitius-own-result hidden"></div>
-            <h4>Top 10 dieser Frage</h4>
-            <ol id="novitiusTopTen" class="novitius-top-ten"></ol>
+            <div id="novitiusTeamRound" class="novitius-team-round"></div>
+            <h4>Interne Spielrangliste</h4>
+            <ol id="novitiusGameRanking" class="novitius-top-ten"></ol>
           </div>
         </div>
       </section>
@@ -154,8 +155,8 @@
     </div>
   </section>
   <canvas id="confetti" aria-hidden="true"></canvas>
-  <script type="module" src="app.js?v=hunt-3"></script>
-  <script type="module" src="hunt-summary.js?v=hunt-3"></script>
-  <script type="module" src="novitius.js?v=hunt-3"></script>
+  <script type="module" src="app.js?v=novitius-2"></script>
+  <script type="module" src="hunt-summary.js?v=novitius-2"></script>
+  <script type="module" src="novitius.js?v=novitius-2"></script>
 </body>
 </html>
