@@ -70,9 +70,9 @@ Die Gesamtpunkte werden aus allen Spielresultaten berechnet. Korrekturen wirken 
 Das Eröffnungsspiel läuft unter `games/ballon-monster`. Die Spielleitung legt
 vor dem Start den identischen Ballonvorrat pro Reich fest. Jede Auslosung wird
 atomar direkt am öffentlichen Spielzustand ausgeführt; bereits gezogene Reiche
-werden aus dem Glücksrad entfernt und können deshalb auch bei gleichzeitigen
+werden aus der Auswahl entfernt und können deshalb auch bei gleichzeitigen
 Adminaktionen nicht doppelt gezogen werden. Das letzte verbleibende Reich wird
-automatisch angekündigt. Die TV-Ansicht zeigt Glücksrad, Auslosung,
+automatisch angekündigt. Die TV-Ansicht zeigt die Wappen nacheinander, danach die Auslosung,
 90-Sekunden-Countdown, Parcoursphase und das jeweils veröffentlichte Resultat.
 
 Der Countdown basiert auf einem gespeicherten Ablaufzeitpunkt und läuft daher

@@ -129,7 +129,7 @@ export function refreshCompletedBalloonMonster(gameValue) {
 export function announceBalloonTeam(gameValue, teamId, automatic = false) {
   const game = cloneGame(gameValue);
   if (game.status !== "running" || game.currentTeamId) throw new Error("Zuerst den aktuellen Durchgang abschliessen oder die Auslosung zurücknehmen.");
-  if (!game.remainingTeamIds.includes(teamId)) throw new Error("Dieses Reich ist nicht mehr im Glücksrad.");
+  if (!game.remainingTeamIds.includes(teamId)) throw new Error("Dieses Reich ist nicht mehr in der Auslosung.");
   const now = Date.now();
   game.currentTeamId = teamId;
   game.remainingTeamIds = game.remainingTeamIds.filter(id => id !== teamId);

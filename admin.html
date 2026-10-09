@@ -21,7 +21,7 @@
 
       <section id="balloonMonsterAdminPanel" class="panel balloon-admin-panel">
         <div class="panel-title"><div><p class="eyebrow">Spiel 1 · Samstagvormittag · ca. 15 Minuten</p><h2>🎈 Ballon-Monster</h2></div><span id="balloonMonsterAdminStatus" class="save-message">Noch nicht gestartet</span></div>
-        <p class="save-message">Glücksrad → 90 Sekunden füllen → Parcours → Ballons zählen. Tagespunkte gibt es erst beim Spielabschluss.</p>
+        <p class="save-message">Wappenauslosung → 90 Sekunden füllen → Parcours → Ballons zählen. Tagespunkte gibt es erst beim Spielabschluss.</p>
         <div id="balloonMonsterStart" class="balloon-start-row">
           <label>Identischer Vorrat pro Reich<input id="balloonMonsterSupply" type="number" min="1" max="999" step="1" value="30" inputmode="numeric"></label>
           <button id="startBalloonMonster" class="primary-button" type="button">Ballon-Monster starten</button>
@@ -34,7 +34,7 @@
             <div><span>Aktuelles Reich</span><strong id="balloonCurrentTeam">Noch nicht ausgelost</strong></div>
             <div><span>Phase</span><strong id="balloonCurrentPhase">Spielstart</strong></div>
           </div>
-          <div id="balloonWheelControls" class="hunt-admin-actions"><button id="drawBalloonTeam" class="primary-button" type="button">Glücksrad drehen</button><button id="undoBalloonDraw" class="secondary-button hidden" type="button">Auslosung rückgängig</button></div>
+          <div id="balloonWheelControls" class="hunt-admin-actions"><button id="drawBalloonTeam" class="primary-button" type="button">Auslosung starten</button><button id="undoBalloonDraw" class="secondary-button hidden" type="button">Auslosung rückgängig</button></div>
 
           <div id="balloonRoundControls" class="balloon-round-admin hidden">
             <div class="balloon-admin-timer"><p class="eyebrow">90-Sekunden-Countdown</p><strong id="balloonAdminTimer">01:30</strong><span id="balloonAdminTimerState">Bereit</span></div>
@@ -215,6 +215,6 @@
     </div>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="admin.js?v=ballon-monster-2"></script>
+  <script type="module" src="admin.js?v=crest-draw-1"></script>
 </body>
 </html>

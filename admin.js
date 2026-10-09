@@ -19,7 +19,7 @@ let huntAdmin = { targets: normaliseHuntTargets() }, huntAdminUnsubscribe = null
 $("#startBalloonMonster").addEventListener("click", async () => {
   const supply = Number($("#balloonMonsterSupply").value);
   if (!confirm(`Ballon-Monster mit ${supply} Ballons Vorrat pro Reich starten? Bisherige Ballon-Monster-Daten werden ersetzt.`)) return;
-  await withDisabled($("#startBalloonMonster"), async () => { await store.startBalloonMonster(supply); toast("Ballon-Monster gestartet · Glücksrad bereit"); });
+  await withDisabled($("#startBalloonMonster"), async () => { await store.startBalloonMonster(supply); toast("Ballon-Monster gestartet · Auslosung bereit"); });
 });
 $("#resetBalloonMonster").addEventListener("click", async () => {
   const running = currentState?.games?.[BALLOON_MONSTER.id]?.status === "running";
@@ -28,13 +28,13 @@ $("#resetBalloonMonster").addEventListener("click", async () => {
   await withDisabled($("#resetBalloonMonster"), async () => { await store.resetBalloonMonster(); toast(running ? "Ballon-Monster abgebrochen" : "Ballon-Monster zurückgesetzt"); });
 });
 $("#drawBalloonTeam").addEventListener("click", async () => { try { const id = await store.drawBalloonMonsterTeam(); toast(`${teamById(id)?.name || "Reich"} wurde ausgelost`); } catch (error) { balloonError(error); } });
-$("#undoBalloonDraw").addEventListener("click", async () => { if (!confirm("Diese Auslosung zurücknehmen und das Reich wieder ins Glücksrad legen?")) return; try { await store.undoBalloonMonsterDraw(); toast("Auslosung zurückgenommen"); } catch (error) { balloonError(error); } });
+$("#undoBalloonDraw").addEventListener("click", async () => { if (!confirm("Diese Auslosung zurücknehmen und das Reich wieder in die Auswahl legen?")) return; try { await store.undoBalloonMonsterDraw(); toast("Auslosung zurückgenommen"); } catch (error) { balloonError(error); } });
 $("#startBalloonTimer").addEventListener("click", async () => { try { await store.startBalloonMonsterTimer(); toast("90-Sekunden-Timer läuft"); } catch (error) { balloonError(error); } });
 $("#pauseBalloonTimer").addEventListener("click", async () => { try { await store.pauseBalloonMonsterTimer(); toast("Timer pausiert"); } catch (error) { balloonError(error); } });
 $("#resetBalloonTimer").addEventListener("click", async () => { if (!confirm("Timer wirklich auf 01:30 zurücksetzen?")) return; try { await store.resetBalloonMonsterTimer(); toast("Timer zurückgesetzt"); } catch (error) { balloonError(error); } });
 $("#startBalloonCourse").addEventListener("click", async () => { try { await store.startBalloonMonsterCourse(); toast("Parcours läuft"); } catch (error) { balloonError(error); } });
 $("#finishBalloonCourse").addEventListener("click", async () => { try { await store.finishBalloonMonsterCourse(); toast("Parcours beendet · Resultat erfassen"); } catch (error) { balloonError(error); } });
-$("#abortBalloonRound").addEventListener("click", async () => { if (!confirm("Aktuellen Durchgang abbrechen? Timer und Entwurf werden gelöscht; das Reich kommt zurück ins Glücksrad.")) return; try { await store.abortBalloonMonsterRound(); toast("Durchgang abgebrochen"); } catch (error) { balloonError(error); } });
+$("#abortBalloonRound").addEventListener("click", async () => { if (!confirm("Aktuellen Durchgang abbrechen? Timer und Entwurf werden gelöscht; das Reich kommt zurück in die Auslosung.")) return; try { await store.abortBalloonMonsterRound(); toast("Durchgang abgebrochen"); } catch (error) { balloonError(error); } });
 $("#balloonResultForm").addEventListener("submit", async event => { event.preventDefault(); const teamId = currentState?.games?.[BALLOON_MONSTER.id]?.currentTeamId; try { await store.saveBalloonMonsterResult(teamId, $("#balloonResultValue").value); toast("Ergebnis als Entwurf gespeichert"); } catch (error) { balloonError(error); } });
 $("#publishBalloonResult").addEventListener("click", async () => { const teamId = currentState?.games?.[BALLOON_MONSTER.id]?.currentTeamId; if (!confirm("Gespeichertes Ergebnis jetzt öffentlich anzeigen?")) return; try { await store.publishBalloonMonsterResult(teamId); toast("Ergebnis veröffentlicht"); } catch (error) { balloonError(error); } });
 $("#nextBalloonTeam").addEventListener("click", async () => { try { await store.prepareNextBalloonMonsterTeam(); await store.drawBalloonMonsterTeam(); toast("Nächstes Reich wird ausgelost"); } catch (error) { balloonError(error); } });
@@ -325,7 +325,7 @@ function renderAdmin(state) {
 function renderBalloonMonsterAdmin(state) {
   const game = state?.games?.[BALLOON_MONSTER.id], status = game?.status || "not-started", running = status === "running", completed = status === "completed";
   const phase = effectiveBalloonPhase(game), team = teamById(game?.currentTeamId), remaining = game?.remainingTeamIds?.length ?? TEAMS.length;
-  const phaseLabels = { idle: "Nicht gestartet", intro: "Spielstart", wheel: "Glücksrad bereit", spinning: "Glücksrad dreht", selected: "Ausgelost", timer: "Ballons füllen", course: "Parcours läuft", entry: "Resultat erfassen", result: "Ergebnis veröffentlicht", completed: "Spiel abgeschlossen" };
+  const phaseLabels = { idle: "Nicht gestartet", intro: "Spielstart", wheel: "Auslosung bereit", spinning: "Wappen wechseln", selected: "Ausgelost", timer: "Ballons füllen", course: "Parcours läuft", entry: "Resultat erfassen", result: "Ergebnis veröffentlicht", completed: "Spiel abgeschlossen" };
   $("#balloonMonsterAdminStatus").textContent = GAME_STATUSES[status] || "Noch nicht gestartet";
   $("#balloonMonsterStart").classList.toggle("hidden", status !== "not-started");
   $("#resetBalloonMonster").classList.toggle("hidden", status === "not-started");
@@ -340,7 +340,7 @@ function renderBalloonMonsterAdmin(state) {
   const canDraw = running && !game.currentTeamId && remaining > 0;
   $("#balloonWheelControls").classList.toggle("hidden", !running || (!canDraw && !game.currentTeamId));
   $("#drawBalloonTeam").classList.toggle("hidden", !canDraw);
-  $("#drawBalloonTeam").textContent = remaining === 1 ? "Letztes Reich ankündigen" : "Glücksrad drehen";
+  $("#drawBalloonTeam").textContent = remaining === 1 ? "Letztes Reich ankündigen" : "Auslosung starten";
   $("#undoBalloonDraw").classList.toggle("hidden", !running || !game.currentTeamId || !!game.publicResults?.[game.currentTeamId]);
   const roundVisible = running && !!game.currentTeamId && !game.publicResults?.[game.currentTeamId];
   $("#balloonRoundControls").classList.toggle("hidden", !roundVisible);
