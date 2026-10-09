@@ -382,7 +382,16 @@ function effectiveBalloonPhase(game) { return game?.phase === "spinning" && Date
 function formatCountdown(ms) { const seconds = Math.max(0, Math.ceil(Number(ms || 0) / 1000)); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
 function balloonFinalSummary(game) { const ranked = balloonRanking(game?.publicResults); return ranked.ranking.map(id => `${ranked.placements[id]}. ${teamById(id)?.name}: ${game.publicResults[id].balloons} Ballons → +${TEAMS.length + 1 - ranked.placements[id]}`).join("\n"); }
 function balloonError(error) { $("#balloonMonsterMessage").textContent = error.message; toast(error.message); }
-setInterval(() => { if (currentState?.games?.[BALLOON_MONSTER.id]?.status === "running") renderBalloonMonsterAdmin(currentState); }, 250);
+setInterval(() => {
+  const game = currentState?.games?.[BALLOON_MONSTER.id];
+  if (game?.status !== "running") return;
+  if (game.phase === "spinning" && Date.now() >= Number(game.spin?.endsAt || 0)) $("#balloonCurrentPhase").textContent = "Ausgelost";
+  if (game.phase !== "timer" || game.timer?.status !== "running") return;
+  const remaining = balloonTimerRemaining(game.timer), expired = remaining <= 0;
+  $("#balloonAdminTimer").textContent = expired ? "ZEIT ABGELAUFEN" : formatCountdown(remaining);
+  $("#balloonAdminTimerState").textContent = expired ? "Keine weiteren Ballons mehr" : "Läuft";
+  if (expired && $("#startBalloonCourse").classList.contains("hidden")) renderBalloonMonsterAdmin(currentState);
+}, 250);
 
 function renderBeerPongAdmin(state) {
   const game = state?.games?.[BEER_PONG.id];
