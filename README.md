@@ -220,3 +220,11 @@ Die frühere Orakel-Logik bleibt intern im Code erhalten, hat aber keine eigene
 Teilnehmer- oder Adminoberfläche mehr. Sie kann später für das 5-Stationen-Spiel
 wiederverwendet werden. Das Ballon Game wird vollständig ignoriert und nicht mehr
 in Rangliste oder Chronik eingerechnet.
+
+## Teilnehmerverwaltung
+
+Jeder abgeschlossene Beitritt mit Name und Reich wird sofort als unveränderliche anonyme Geräteanmeldung unter `players/{uid}` gespeichert. Die private Adminliste zeigt Name, Reich, Beitrittszeit und Teamanzahl; mehrfach verwendete Namen werden markiert. Die Liste ist nach dem Abmelden leer und für Teilnehmer nicht lesbar.
+
+**Beitritt pausieren** setzt `settings/registrationOpen` auf `false`. Firebase-Regeln verweigern dann neue Geräteanmeldungen, auch bei direkten Schreibversuchen. Bestehende Mitglieder können weiter teilnehmen; die öffentliche Rangliste bleibt zugänglich. Bei anonymer Anmeldung kann eine Person während des offenen Beitritts mehrere Browser verwenden. Für einen festen Teilnehmerkreis nach der Anmeldung den Beitritt pausieren. Alte, bisher nur lokal gespeicherte Reichwahlen erscheinen beim nächsten Besuch, sofern der Beitritt offen ist.
+
+**Teilnehmer und Testdaten löschen** entfernt nach Bestätigung die Geräteanmeldung, beanspruchte Song-Teilnahme samt Antworten und Bewertungen, persönliche Quiz-Antworten samt Abgabemarkierungen sowie Nachtjagd-Funde dieser UID. Fremde Daten und vorbereitete Fragen/Gegenstände bleiben erhalten. Veröffentlichte Wertungen werden im selben Spielobjekt neu berechnet. Nach Entfernung der letzten Song-/Quiz-Teilnahme aus einem abgeschlossenen Spiel werden dessen Testpunkte zurückgesetzt. Ein neuer Quiz-Gleichstand erfordert die bestehende Stechfrage. Die Adminsperre serialisiert Löschungen; eine zeitlich begrenzte Schreibsperre für die betroffene UID verhindert konkurrierende Abgaben während der Bereinigung. Aktive Teilnehmerseiten entfernen ihre lokale Anmeldung sofort. Ein erneuter Beitritt ist nach Öffnen möglich. Firebase-Auth-Konten anderer Personen werden damit nicht gelöscht.

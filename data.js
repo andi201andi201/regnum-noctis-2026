@@ -1,4 +1,4 @@
-import { serverNow } from "./time.js?v=firebase-live-20261009-1";
+import { serverNow } from "./time.js?v=participants-20261010-1";
 
 export const TEAMS = [
   { id: "draco", name: "Draco", marker: "🔴", title: "Reich des Drachen", logo: "assets/teams/draco.webp", color: "#d84747", glow: "#ff6b57" },
@@ -11,6 +11,7 @@ export const TEAMS = [
 export const EMPTY_STATE = {
   settings: {
     mode: "live",
+    registrationOpen: true,
     updatedAt: 0,
     hunt: { active: false, roundId: "", startedAt: 0, stoppedAt: 0, targetCount: 10, targets: {} },
     oracle: { active: false, revealed: false, roundId: "", question: "", answer: 0, unit: "", maxPoints: 5, startedAt: 0, endsAt: 0, results: {} }

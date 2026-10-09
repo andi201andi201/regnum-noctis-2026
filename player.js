@@ -13,13 +13,18 @@ export function getPlayerProfile() {
   catch { return null; }
 }
 
-export function savePlayerProfile(name, teamId) {
+export function clearPlayerProfile() {
+  localStorage.removeItem(PROFILE_KEY);
+  window.dispatchEvent(new CustomEvent("regnum-player-changed", { detail: null }));
+}
+
+export function savePlayerProfile(name, teamId, membership = null) {
   const existing = getPlayerProfile();
   const profile = {
-    id: existing?.id || crypto.randomUUID(),
+    id: membership?.id || existing?.id || crypto.randomUUID(),
     name: name.trim().slice(0, 32),
     teamId,
-    joinedAt: existing?.joinedAt || Date.now()
+    joinedAt: membership?.joinedAt || existing?.joinedAt || Date.now()
   };
   localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
   window.dispatchEvent(new CustomEvent("regnum-player-changed", { detail: profile }));

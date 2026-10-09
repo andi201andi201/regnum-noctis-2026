@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=firebase-live-20261009-1">
+  <link rel="stylesheet" href="styles.css?v=participants-20261010-1">
 </head>
 <body>
   <div class="stars" aria-hidden="true"></div>
@@ -23,14 +23,17 @@
           <label class="name-field">Dein Name<input id="playerName" type="text" maxlength="32" autocomplete="name" placeholder="Name eingeben" required></label>
           <fieldset><legend>Wähle dein Reich</legend><div id="teamChoices" class="team-choices"></div></fieldset>
           <p id="joinError" class="form-error"></p>
+          <p id="joinStatus" class="save-message" role="status"></p>
           <button class="primary-button" type="submit">Herkunft enthüllen</button>
         </form>
+        <button id="viewRanking" class="text-button" type="button">Rangliste ansehen</button>
       </div>
       <div id="storyStep" class="story-step hidden">
         <p class="eyebrow">Dein Reich</p>
         <img id="storyCrest" alt="">
         <h2 id="storyTeam"></h2>
         <p id="storyText"></p>
+        <p id="storyError" class="form-error" role="status"></p>
         <button id="enterRealm" class="primary-button" type="button">Ins Regnum eintreten</button>
         <button id="backToChoice" class="text-button" type="button">Auswahl ändern</button>
       </div>
@@ -40,7 +43,7 @@
     <div class="eyebrow">Rosswöschwyber · Probeweekend</div>
     <h1>Regnum <span>Noctis</span></h1>
     <p class="subtitle">Die fünf Reiche der Nacht</p>
-    <div class="hero-pills"><div class="live-pill"><i></i><span id="connectionText">Verbinde …</span></div><button id="playerBadge" class="player-badge hidden" type="button" title="Name oder Reich ändern"></button></div>
+    <div class="hero-pills"><div class="live-pill"><i></i><span id="connectionText">Verbinde …</span></div><button id="playerBadge" class="player-badge hidden" type="button" title="Teilnahme ansehen"></button><button id="joinBtn" class="text-button hidden" type="button">Reich beitreten</button></div>
   </header>
 
   <main class="shell">
@@ -170,9 +173,9 @@
     </div>
   </section>
   <canvas id="confetti" aria-hidden="true"></canvas>
-  <script type="module" src="app.js?v=firebase-live-20261009-1"></script>
-  <script type="module" src="hunt-summary.js?v=firebase-live-20261009-1"></script>
-  <script type="module" src="novitius.js?v=firebase-live-20261009-1"></script>
-  <script type="module" src="challenges.js?v=firebase-live-20261009-1"></script>
+  <script type="module" src="app.js?v=participants-20261010-1"></script>
+  <script type="module" src="hunt-summary.js?v=participants-20261010-1"></script>
+  <script type="module" src="novitius.js?v=participants-20261010-1"></script>
+  <script type="module" src="challenges.js?v=participants-20261010-1"></script>
 </body>
 </html>

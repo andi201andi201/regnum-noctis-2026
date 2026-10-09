@@ -1,6 +1,6 @@
-import { TEAMS } from "./data.js?v=firebase-live-20261009-1";
-import { getPlayerProfile } from "./player.js?v=firebase-live-20261009-1";
-import { getStore } from "./store.js?v=firebase-live-20261009-1";
+import { TEAMS } from "./data.js?v=participants-20261010-1";
+import { getPlayerProfile } from "./player.js?v=participants-20261010-1";
+import { getStore } from "./store.js?v=participants-20261010-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();

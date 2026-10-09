@@ -1,5 +1,5 @@
-import { TEAMS } from "./data.js?v=firebase-live-20261009-1";
-import { serverNow } from "./time.js?v=firebase-live-20261009-1";
+import { TEAMS } from "./data.js?v=participants-20261010-1";
+import { serverNow } from "./time.js?v=participants-20261010-1";
 
 export const BEER_PONG = {
   id: "beer-pong",

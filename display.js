@@ -1,10 +1,10 @@
-import { TEAMS, totalsFromGames, formatTime, NOVITIUS_GAME } from "./data.js?v=firebase-live-20261009-1";
-import { getStore } from "./store.js?v=firebase-live-20261009-1";
-import { huntFinds, huntProgress } from "./hunt-data.js?v=firebase-live-20261009-1";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, stationById, challengeTimerRemaining } from "./challenges-data.js?v=firebase-live-20261009-1";
-import { BEER_PONG, beerPongMatchList, calculateBeerPongGroupTable } from "./beer-pong-data.js?v=firebase-live-20261009-1";
-import { BALLOON_MONSTER, balloonTimerRemaining, balloonRanking } from "./balloon-monster-data.js?v=firebase-live-20261009-1";
-import { serverNow } from "./time.js?v=firebase-live-20261009-1";
+import { TEAMS, totalsFromGames, formatTime, NOVITIUS_GAME } from "./data.js?v=participants-20261010-1";
+import { getStore } from "./store.js?v=participants-20261010-1";
+import { huntFinds, huntProgress } from "./hunt-data.js?v=participants-20261010-1";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, stationById, challengeTimerRemaining } from "./challenges-data.js?v=participants-20261010-1";
+import { BEER_PONG, beerPongMatchList, calculateBeerPongGroupTable } from "./beer-pong-data.js?v=participants-20261010-1";
+import { BALLOON_MONSTER, balloonTimerRemaining, balloonRanking } from "./balloon-monster-data.js?v=participants-20261010-1";
+import { serverNow } from "./time.js?v=participants-20261010-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();

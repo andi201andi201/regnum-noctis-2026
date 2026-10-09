@@ -1,7 +1,7 @@
-import { TEAMS, formatTime } from "./data.js?v=firebase-live-20261009-1";
-import { getStore } from "./store.js?v=firebase-live-20261009-1";
-import { getPlayerProfile } from "./player.js?v=firebase-live-20261009-1";
-import { HUNT_POINTS_PER_OBJECT, huntFinds, huntProgress } from "./hunt-data.js?v=firebase-live-20261009-1";
+import { TEAMS, formatTime } from "./data.js?v=participants-20261010-1";
+import { getStore } from "./store.js?v=participants-20261010-1";
+import { getPlayerProfile, clearPlayerProfile } from "./player.js?v=participants-20261010-1";
+import { HUNT_POINTS_PER_OBJECT, huntFinds, huntProgress } from "./hunt-data.js?v=participants-20261010-1";
 
 const $ = selector => document.querySelector(selector);
 const DETECTION_HOLD_MS = 950;
@@ -15,6 +15,11 @@ const CATEGORY_NAMES = { bottle: "Flasche", cup: "Becher/Tasse", chair: "Stuhl",
 let detector = null, stream = null, animationFrame = null, currentState = null, selectedTarget = null;
 let lastDetectionAt = 0, detectedSince = null, completed = false, wrongUntil = 0;
 const store = await getStore();
+let registeredUid = null;
+store.subscribePlayer((player, uid) => {
+  if (registeredUid === uid && uid && !player) { clearPlayerProfile(); closeCamera(); }
+  registeredUid = player ? uid : null;
+});
 
 $("#huntMissionGrid").addEventListener("click", event => {
   const button = event.target.closest("button[data-scan-target]");

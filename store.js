@@ -1,11 +1,11 @@
-import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js?v=firebase-live-20261009-1";
-import "./status.js?v=firebase-live-20261009-1";
-import { serverNow, setServerTimeOffset } from "./time.js?v=firebase-live-20261009-1";
-import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, rebuildNovitiusReveals, finalizeNovitiusGame, scoreNovitiusAnswer } from "./data.js?v=firebase-live-20261009-1";
-import { HUNT_DEFAULT_TARGETS, HUNT_POINTS_PER_OBJECT, normaliseHuntTargets, huntTargetList } from "./hunt-data.js?v=firebase-live-20261009-1";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, buildGameChallenges, normaliseGameChallengesAdmin, cleanEstimateQuestion, cleanChallengeResult, cleanEstimateValue, buildChallengePublicRound, buildPublicEstimate, calculateGameChallenges, challengeEstimateQuestions, challengeTimerRemaining, emptyChallengeTimer } from "./challenges-data.js?v=firebase-live-20261009-1";
-import { BEER_PONG, buildBeerPong, normaliseBeerPongAdmin, cleanBeerPongResult, publicBeerPongMatch, evaluateBeerPongGroups, releaseBeerPongSemifinals, releaseBeerPongFinal, completeBeerPong, resetBeerPongKnockouts, resetBeerPongFinal } from "./beer-pong-data.js?v=firebase-live-20261009-1";
-import { BALLOON_MONSTER, buildBalloonMonster, normaliseBalloonMonsterAdmin, cleanBalloonSupply, cleanBalloonResult, announceBalloonTeam, undoBalloonDraw, emptyBalloonTimer, balloonTimerRemaining, publishBalloonResult, completeBalloonMonster } from "./balloon-monster-data.js?v=firebase-live-20261009-1";
+import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js?v=participants-20261010-1";
+import "./status.js?v=participants-20261010-1";
+import { serverNow, setServerTimeOffset } from "./time.js?v=participants-20261010-1";
+import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, rebuildNovitiusReveals, finalizeNovitiusGame, scoreNovitiusAnswer } from "./data.js?v=participants-20261010-1";
+import { HUNT_DEFAULT_TARGETS, HUNT_POINTS_PER_OBJECT, normaliseHuntTargets, huntTargetList } from "./hunt-data.js?v=participants-20261010-1";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, buildGameChallenges, normaliseGameChallengesAdmin, cleanEstimateQuestion, cleanChallengeResult, cleanEstimateValue, buildChallengePublicRound, buildPublicEstimate, calculateGameChallenges, challengeEstimateQuestions, challengeTimerRemaining, emptyChallengeTimer } from "./challenges-data.js?v=participants-20261010-1";
+import { BEER_PONG, buildBeerPong, normaliseBeerPongAdmin, cleanBeerPongResult, publicBeerPongMatch, evaluateBeerPongGroups, releaseBeerPongSemifinals, releaseBeerPongFinal, completeBeerPong, resetBeerPongKnockouts, resetBeerPongFinal } from "./beer-pong-data.js?v=participants-20261010-1";
+import { BALLOON_MONSTER, buildBalloonMonster, normaliseBalloonMonsterAdmin, cleanBalloonSupply, cleanBalloonResult, announceBalloonTeam, undoBalloonDraw, emptyBalloonTimer, balloonTimerRemaining, publishBalloonResult, completeBalloonMonster } from "./balloon-monster-data.js?v=participants-20261010-1";
 
 const STORAGE_KEY = "regnum-noctis-demo";
 let firebase = null;
@@ -52,15 +52,24 @@ async function ensurePlayer(profile) {
   const user = await ensureAnonymous();
   if (!TEAMS.some(team => team.id === profile?.teamId) || !String(profile?.name || "").trim()) throw new Error("Bitte Name und Reich wählen.");
   const playerRef = firebase.ref(firebase.db, `players/${user.uid}`);
-  const result = await firebase.runTransaction(playerRef, current => current ? undefined : { teamId: profile.teamId, playerName: profile.name.trim().slice(0, 32), joinedAt: firebase.serverTimestamp() }, { applyLocally: false });
-  const player = result.snapshot.val();
+  let player = (await firebase.get(playerRef)).val();
+  if (!player) {
+    if ((await firebase.get(firebase.ref(firebase.db, "settings/registrationOpen"))).val() === false) throw new Error("Der Beitritt ist pausiert. Bitte bei der Spielleitung melden.");
+    try {
+      const result = await firebase.runTransaction(playerRef, current => current ? undefined : { teamId: profile.teamId, playerName: profile.name.trim().slice(0, 32), joinedAt: firebase.serverTimestamp() }, { applyLocally: false });
+      player = result.snapshot.val();
+    } catch (error) {
+      if ((await firebase.get(firebase.ref(firebase.db, "settings/registrationOpen"))).val() === false) throw new Error("Der Beitritt ist pausiert. Bitte bei der Spielleitung melden.");
+      throw error;
+    }
+  }
   if (player?.teamId !== profile.teamId) throw new Error("Dieses Gerät ist bereits für ein anderes Reich angemeldet.");
-  return { ...profile, teamId: player.teamId, name: player.playerName };
+  return { ...profile, id: user.uid, teamId: player.teamId, name: player.playerName, joinedAt: player.joinedAt };
 }
 
 // Eine gemeinsame Sperre serialisiert mehrpfadige Admin-Korrekturen auf allen Geräten.
 function serialiseAdminActions(store) {
-  const participantActions = new Set(["claimSongBattleTeam", "submitSongBattleAnswer", "claimNovitiusParticipant", "submitNovitiusAnswer", "claimHuntObject", "submitOracleAnswer"]);
+  const participantActions = new Set(["registerPlayer", "claimSongBattleTeam", "submitSongBattleAnswer", "claimNovitiusParticipant", "submitNovitiusAnswer", "claimHuntObject", "submitOracleAnswer"]);
   let queue = Promise.resolve();
   for (const [name, action] of Object.entries(store)) {
     if (typeof action !== "function" || name.startsWith("subscribe") || participantActions.has(name)) continue;
@@ -152,6 +161,79 @@ function firebaseStore() {
       return () => stops.forEach(stop => stop());
     },
     subscribeOracleQuestions(callback) { return listen("oracleQuestions", callback); },
+    subscribePlayers(callback) { return listen("players", callback); },
+    subscribePlayer(callback) {
+      let stopPlayer;
+      const stopAuth = firebase.onAuthStateChanged(firebase.auth, user => {
+        stopPlayer?.(); stopPlayer = null;
+        if (user?.isAnonymous) stopPlayer = listen(`players/${user.uid}`, value => callback(value, user.uid), null);
+        else callback(null, null);
+      });
+      return () => { stopAuth(); stopPlayer?.(); };
+    },
+    registerPlayer: ensurePlayer,
+    setRegistrationOpen(open) {
+      if (typeof open !== "boolean") throw new Error("Ungültiger Beitrittsstatus.");
+      return firebase.update(firebase.ref(firebase.db, "settings"), { registrationOpen: open, updatedAt: firebase.serverTimestamp() });
+    },
+    async removePlayer(uid) {
+      if (!/^[A-Za-z0-9_-]{10,128}$/.test(uid) || (await firebase.get(firebase.ref(firebase.db, `admins/${uid}`))).val() === true) throw new Error("Ungültige Teilnehmer-ID.");
+      const player = (await firebase.get(firebase.ref(firebase.db, `players/${uid}`))).val();
+      if (!player) return { removed: false };
+      const registrationOpen = (await firebase.get(firebase.ref(firebase.db, "settings/registrationOpen"))).val() !== false;
+      let quizRegistrationOpen = null;
+      // Die betroffene UID kann während der Bereinigung keine neuen Daten erzeugen.
+      await firebase.update(firebase.ref(firebase.db, "settings"), { registrationOpen: false, participantCleanup: uid });
+      try {
+        const quiz = (await firebase.get(firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`))).val();
+        if (quiz?.registrationOpen) {
+          quizRegistrationOpen = true;
+          await firebase.update(firebase.ref(firebase.db, `games/${NOVITIUS_GAME.id}`), { registrationOpen: false });
+        }
+        const paths = ["games", "songBattleParticipants", "songBattleAnswers", "songBattleAdmin", "novitiusParticipants", "novitiusAnswers", "novitiusSubmissions", "novitiusAdmin"];
+        const state = Object.fromEntries(await Promise.all(paths.map(async path => [path, (await firebase.get(firebase.ref(firebase.db, path))).val() || {}])));
+        const updates = { [`players/${uid}`]: null, "settings/updatedAt": firebase.serverTimestamp() };
+        for (const [teamId, participant] of Object.entries(state.songBattleParticipants)) {
+          if (participant.claimantId !== uid) continue;
+          updates[`songBattleParticipants/${teamId}`] = null;
+          updates[`songBattleAnswers/${teamId}`] = null;
+          delete state.songBattleParticipants[teamId];
+          delete state.songBattleAnswers[teamId];
+          const admin = normaliseSongBattleAdmin(state.songBattleAdmin);
+          Object.values(admin.evaluations).forEach(teams => { delete teams[teamId]; });
+          admin.internalPoints = songBattleScores(admin.evaluations);
+          updates.songBattleAdmin = admin;
+          let game = state.games[SONG_BATTLE.id];
+          if (game) {
+            game = { ...game, publicReveals: Object.fromEntries(Object.keys(game.revealedSongs || {}).filter(key => game.revealedSongs[key]).map(key => [key, buildSongPublicReveal(state.songBattleAnswers, admin.evaluations, Number(key.replace("song-", "")))])) };
+            updates[`games/${SONG_BATTLE.id}`] = game.status === "completed" ? Object.keys(state.songBattleParticipants).length ? finalizeSongBattle(game, admin.evaluations) : buildSongBattle("not-started", game) : game;
+          }
+        }
+        updates[`novitiusParticipants/${uid}`] = null;
+        updates[`novitiusAnswers/${uid}`] = null;
+        for (const [key, submissions] of Object.entries(state.novitiusSubmissions)) if (submissions[uid]) updates[`novitiusSubmissions/${key}/${uid}`] = null;
+        const quizParticipant = state.novitiusParticipants[uid];
+        if (quizParticipant) {
+          delete state.novitiusParticipants[uid]; delete state.novitiusAnswers[uid];
+          let game = state.games[NOVITIUS_GAME.id];
+          if (game) {
+            const questions = normaliseNovitiusAdmin(state.novitiusAdmin).questions;
+            game = { ...game, teamSizes: novitiusTeamSizes(state.novitiusParticipants), tieBreak: null };
+            game.publicReveals = rebuildNovitiusReveals(questions, state.novitiusParticipants, state.novitiusAnswers, game.teamSizes, game.revealedQuestions || {});
+            if (quizRegistrationOpen) game.registrationOpen = true;
+            if (game.status === "completed") game = Object.keys(state.novitiusParticipants).length ? refinalizeNovitiusOrPending(game, questions, state.novitiusParticipants, state.novitiusAnswers) : buildNovitiusGame("not-started", game);
+            updates[`games/${NOVITIUS_GAME.id}`] = game;
+          }
+        }
+        for (const [id, game] of Object.entries(state.games)) if (game.source === "team-hunt" && game.claimantId === uid) updates[`games/${id}`] = null;
+        await firebase.update(firebase.ref(firebase.db), updates);
+        return { removed: true };
+      } finally {
+        const updates = { "settings/registrationOpen": registrationOpen, "settings/participantCleanup": null, "settings/updatedAt": firebase.serverTimestamp() };
+        if (quizRegistrationOpen) updates[`games/${NOVITIUS_GAME.id}/registrationOpen`] = true;
+        await firebase.update(firebase.ref(firebase.db), updates);
+      }
+    },
     subscribeSongBattleAnswers(callback) { return listen("songBattleAnswers", callback); },
     subscribeSongBattleParticipants(callback) { return listen("songBattleParticipants", callback); },
     subscribeSongBattleAdmin(callback) { return listen("songBattleAdmin", value => callback(normaliseSongBattleAdmin(value))); },

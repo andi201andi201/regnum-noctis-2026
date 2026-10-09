@@ -1,14 +1,15 @@
-import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=firebase-live-20261009-1";
-import { getStore, beerPongAdminGame } from "./store.js?v=firebase-live-20261009-1";
-import { serverNow } from "./time.js?v=firebase-live-20261009-1";
-import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=firebase-live-20261009-1";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, CHALLENGE_STATIONS, normaliseGameChallengesAdmin, challengeEstimateQuestions, stationById, challengeTimerRemaining, calculateGameChallenges } from "./challenges-data.js?v=firebase-live-20261009-1";
-import { BEER_PONG, normaliseBeerPongAdmin, beerPongMatchList, calculateBeerPongGroupTable, beerPongTieGroups } from "./beer-pong-data.js?v=firebase-live-20261009-1";
-import { BALLOON_MONSTER, normaliseBalloonMonsterAdmin, balloonTimerRemaining, balloonRanking } from "./balloon-monster-data.js?v=firebase-live-20261009-1";
+import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=participants-20261010-1";
+import { getStore, beerPongAdminGame } from "./store.js?v=participants-20261010-1";
+import { serverNow } from "./time.js?v=participants-20261010-1";
+import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=participants-20261010-1";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, CHALLENGE_STATIONS, normaliseGameChallengesAdmin, challengeEstimateQuestions, stationById, challengeTimerRemaining, calculateGameChallenges } from "./challenges-data.js?v=participants-20261010-1";
+import { BEER_PONG, normaliseBeerPongAdmin, beerPongMatchList, calculateBeerPongGroupTable, beerPongTieGroups } from "./beer-pong-data.js?v=participants-20261010-1";
+import { BALLOON_MONSTER, normaliseBalloonMonsterAdmin, balloonTimerRemaining, balloonRanking } from "./balloon-monster-data.js?v=participants-20261010-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
 let currentState = null, editingId = null;
+let players = {}, playersUnsubscribe = null, participantBusy = false;
 let songAnswers = {}, songParticipants = {}, songAdmin = { evaluations: {}, internalPoints: {} }, songAnswersUnsubscribe = null, songParticipantsUnsubscribe = null, songAdminUnsubscribe = null;
 let songReviewNumber = 1;
 let novitiusAdmin = { questions: {} }, novitiusParticipants = {}, novitiusAnswers = {}, novitiusAdminUnsubscribe = null, novitiusParticipantsUnsubscribe = null, novitiusAnswersUnsubscribe = null, novitiusReviewNumber = 1;
@@ -16,6 +17,38 @@ let challengesAdmin = normaliseGameChallengesAdmin(), challengesAdminUnsubscribe
 let beerPongAdmin = normaliseBeerPongAdmin(), beerPongAdminUnsubscribe = null;
 let balloonMonsterAdmin = normaliseBalloonMonsterAdmin(), balloonMonsterAdminUnsubscribe = null;
 let huntAdmin = { targets: normaliseHuntTargets() }, huntAdminUnsubscribe = null, huntTargetSignature = "";
+
+$("#toggleRegistration").addEventListener("click", async () => {
+  if (participantBusy || !currentState) return;
+  await participantAction(() => store.setRegistrationOpen(currentState.settings.registrationOpen === false));
+});
+$("#participantList").addEventListener("click", async event => {
+  const button = event.target.closest("button[data-remove-player]");
+  const uid = button?.dataset.removePlayer, player = players[uid];
+  if (!player || participantBusy) return;
+  if (!confirm(`${player.playerName} aus ${teamById(player.teamId)?.name || "dem Reich"} entfernen?\n\nDie Geräteanmeldung, Song-/Quiz-Teilnahme samt Antworten und persönliche Nachtjagd-Funde werden gelöscht. Betroffene Wertungen und Tagespunkte werden neu berechnet.`)) return;
+  await participantAction(async () => { await store.removePlayer(uid); toast("Teilnehmer und zugehörige Testdaten entfernt"); });
+});
+async function participantAction(action) {
+  participantBusy = true; $("#participantMessage").textContent = ""; renderParticipantAdmin();
+  try { await action(); }
+  catch (error) { $("#participantMessage").textContent = `Änderung fehlgeschlagen: ${error.message}`; }
+  finally { participantBusy = false; renderParticipantAdmin(); }
+}
+function renderParticipantAdmin() {
+  const entries = Object.entries(players).sort((a, b) => a[1].playerName.localeCompare(b[1].playerName, "de") || a[0].localeCompare(b[0]));
+  const open = currentState?.settings?.registrationOpen !== false;
+  $("#participantCount").textContent = `${entries.length} angemeldet`;
+  $("#registrationStatus").textContent = open ? "Beitritt offen" : "Beitritt pausiert · bestehende Teilnehmer bleiben aktiv";
+  $("#toggleRegistration").textContent = open ? "Beitritt pausieren" : "Beitritt wieder öffnen";
+  $("#toggleRegistration").disabled = participantBusy || !currentState;
+  $("#participantTeamCounts").innerHTML = TEAMS.map(team => `<span>${team.marker} ${team.name}: <b>${entries.filter(([, player]) => player.teamId === team.id).length}</b></span>`).join("");
+  $("#participantList").innerHTML = entries.map(([uid, player]) => {
+    const duplicate = entries.filter(([, other]) => other.playerName.trim().toLocaleLowerCase("de") === player.playerName.trim().toLocaleLowerCase("de")).length > 1;
+    return `<article class="admin-result participant-row"><div><strong>${escapeHtml(player.playerName)}</strong><small>${escapeHtml(teamById(player.teamId)?.name || player.teamId)} · Beitritt ${player.joinedAt ? escapeHtml(formatTime(player.joinedAt, true)) : "unbekannt"}${duplicate ? " · Name mehrfach angemeldet" : ""}</small></div><div class="admin-actions"><button class="danger" data-remove-player="${escapeAttribute(uid)}" ${participantBusy ? "disabled" : ""}>Teilnehmer und Testdaten löschen</button></div></article>`;
+  }).join("");
+  $("#participantEmpty").classList.toggle("hidden", entries.length > 0);
+}
 
 $("#startBalloonMonster").addEventListener("click", async () => {
   const supply = Number($("#balloonMonsterSupply").value);
@@ -313,6 +346,7 @@ $("#adminResults").addEventListener("click", async event => {
 });
 
 function renderAdmin(state) {
+  renderParticipantAdmin();
   renderBalloonMonsterAdmin(state);
   renderSongBattleAdmin(state);
   renderNovitiusAdmin(state);
@@ -792,6 +826,8 @@ async function withDisabled(button, action) { button.disabled = true; try { awai
 function setAccess(granted) {
   if (!granted) $("#password").value = "";
   $("#loginPanel").classList.toggle("hidden", granted); $("#adminContent").classList.toggle("hidden", !granted); $("#logoutBtn").classList.toggle("hidden", !granted);
+  if (granted && !playersUnsubscribe) playersUnsubscribe = store.subscribePlayers(value => { players = value || {}; renderParticipantAdmin(); });
+  if (!granted) { playersUnsubscribe?.(); playersUnsubscribe = null; players = {}; renderParticipantAdmin(); $("#participantMessage").textContent = ""; }
   if (granted && !songAnswersUnsubscribe) songAnswersUnsubscribe = store.subscribeSongBattleAnswers(answers => { songAnswers = answers; if (currentState) renderSongBattleAdmin(currentState); });
   if (granted && !songParticipantsUnsubscribe) songParticipantsUnsubscribe = store.subscribeSongBattleParticipants(participants => { songParticipants = participants; if (currentState) renderSongBattleAdmin(currentState); });
   if (granted && !songAdminUnsubscribe) songAdminUnsubscribe = store.subscribeSongBattleAdmin(value => { songAdmin = value; if (currentState) renderSongBattleAdmin(currentState); });

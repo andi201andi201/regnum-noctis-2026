@@ -1,9 +1,9 @@
-import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=firebase-live-20261009-1";
-import { getStore } from "./store.js?v=firebase-live-20261009-1";
-import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js?v=firebase-live-20261009-1";
-import { GAME_CHALLENGES } from "./challenges-data.js?v=firebase-live-20261009-1";
-import { BEER_PONG } from "./beer-pong-data.js?v=firebase-live-20261009-1";
-import { BALLOON_MONSTER } from "./balloon-monster-data.js?v=firebase-live-20261009-1";
+import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=participants-20261010-1";
+import { getStore } from "./store.js?v=participants-20261010-1";
+import { TEAM_STORIES, getPlayerProfile, savePlayerProfile, clearPlayerProfile } from "./player.js?v=participants-20261010-1";
+import { GAME_CHALLENGES } from "./challenges-data.js?v=participants-20261010-1";
+import { BEER_PONG } from "./beer-pong-data.js?v=participants-20261010-1";
+import { BALLOON_MONSTER } from "./balloon-monster-data.js?v=participants-20261010-1";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -58,6 +58,7 @@ $("#songBattleAnswerForm").addEventListener("submit", async event => {
 function setupOnboarding() {
   let selectedTeamId = null;
   let pendingProfile = null;
+  let membership = null, membershipUid = null, joining = false;
   const onboarding = $("#onboarding");
   $("#teamChoices").innerHTML = TEAMS.map(team => `
     <label class="team-choice" style="--team:${team.color}">
@@ -74,15 +75,44 @@ function setupOnboarding() {
     $("#joinStep").classList.remove("hidden");
     onboarding.classList.remove("hidden");
     document.body.classList.add("onboarding-open");
+    updateJoinStatus();
   };
 
   const close = profile => {
     onboarding.classList.add("hidden");
     document.body.classList.remove("onboarding-open");
-    const team = TEAMS.find(item => item.id === profile.teamId);
-    $("#playerBadge").innerHTML = `<img src="${team.logo}" alt=""> <span>${escapeHtml(profile.name)} · ${team.name}</span>`;
-    $("#playerBadge").classList.remove("hidden");
+    const team = TEAMS.find(item => item.id === profile?.teamId);
+    $("#playerBadge").classList.toggle("hidden", !team);
+    $("#joinBtn").classList.toggle("hidden", !!team);
+    if (team) $("#playerBadge").innerHTML = `<img src="${team.logo}" alt=""> <span>${escapeHtml(profile.name)} · ${team.name}</span>`;
   };
+  function updateJoinStatus() {
+    const paused = currentState?.settings?.registrationOpen === false && !membership;
+    $("#joinStatus").textContent = paused ? "Der Beitritt ist pausiert. Bitte bei der Spielleitung melden. Die Rangliste bleibt sichtbar." : membership ? "Dein Name und Reich sind für dieses Gerät registriert. Änderungen übernimmt die Spielleitung." : "";
+    $("#joinForm button[type=submit]").disabled = paused || joining;
+    $("#enterRealm").disabled = paused || joining;
+    $("#playerName").readOnly = !!membership;
+    document.querySelectorAll('input[name="realm"]').forEach(input => { input.disabled = !!membership; });
+    if (paused && !$("#storyStep").classList.contains("hidden")) $("#storyError").textContent = "Der Beitritt wurde inzwischen pausiert.";
+  }
+  store.subscribe(updateJoinStatus);
+  store.subscribePlayer((player, uid) => {
+    const removed = membership && membershipUid === uid && !player;
+    membership = player; membershipUid = uid;
+    if (removed) {
+      clearPlayerProfile(); close(null); open();
+      $("#joinError").textContent = "Deine Teilnahme wurde von der Spielleitung entfernt. Du kannst erneut beitreten, sobald der Beitritt offen ist.";
+    }
+    updateJoinStatus();
+  });
+  async function register(profile) {
+    joining = true; updateJoinStatus();
+    try {
+      const accepted = await store.registerPlayer(profile);
+      membership = { teamId: accepted.teamId, playerName: accepted.name, joinedAt: accepted.joinedAt }; membershipUid = accepted.id;
+      close(savePlayerProfile(accepted.name, accepted.teamId, accepted));
+    } finally { joining = false; updateJoinStatus(); }
+  }
 
   $("#teamChoices").addEventListener("change", event => { selectedTeamId = event.target.value; $("#joinError").textContent = ""; });
   $("#joinForm").addEventListener("submit", event => {
@@ -99,12 +129,21 @@ function setupOnboarding() {
     $("#storyStep").classList.remove("hidden");
   });
   $("#backToChoice").addEventListener("click", () => { $("#storyStep").classList.add("hidden"); $("#joinStep").classList.remove("hidden"); });
-  $("#enterRealm").addEventListener("click", () => close(savePlayerProfile(pendingProfile.name, pendingProfile.teamId)));
+  $("#enterRealm").addEventListener("click", async () => {
+    if (!pendingProfile || joining) return;
+    $("#storyError").textContent = "";
+    try { await register(pendingProfile); }
+    catch (error) { $("#storyError").textContent = error.message; }
+  });
   $("#playerBadge").addEventListener("click", open);
+  $("#joinBtn").addEventListener("click", open);
+  $("#viewRanking").addEventListener("click", () => close(membership ? getPlayerProfile() : null));
 
   const profile = getPlayerProfile();
-  if (profile && TEAMS.some(team => team.id === profile.teamId) && profile.name) close(profile);
-  else open();
+  open();
+  if (profile && TEAMS.some(team => team.id === profile.teamId) && profile.name) register(profile).catch(error => {
+    clearPlayerProfile(); close(null); open(); $("#joinError").textContent = error.message;
+  });
 }
 
 function render(state) {
