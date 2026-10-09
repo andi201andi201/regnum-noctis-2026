@@ -1,4 +1,4 @@
-import { TEAMS } from "./data.js?v=beer-pong-1";
+import { TEAMS } from "./data.js?v=beer-pong-2";
 
 export const BEER_PONG = {
   id: "beer-pong",
@@ -11,8 +11,8 @@ export const BEER_PONG_GROUP_MATCHES = [
   groupMatch("group-1", 1, 1, "draco", "serpens"),
   groupMatch("group-2", 1, 2, "lupus", "corvus"),
   groupMatch("group-3", 2, 1, "noctua", "draco"),
-  groupMatch("group-4", 3, 1, "serpens", "lupus"),
-  groupMatch("group-5", 4, 1, "corvus", "noctua")
+  groupMatch("group-4", 2, 2, "serpens", "lupus"),
+  groupMatch("group-5", 3, 1, "corvus", "noctua")
 ];
 
 export function buildBeerPong(status = "running", existing = null) {
@@ -24,6 +24,7 @@ export function buildBeerPong(status = "running", existing = null) {
     description: BEER_PONG.description,
     status,
     phase: running ? "groups" : completed ? "completed" : "hidden",
+    currentRound: status === "not-started" ? 0 : Math.min(3, Math.max(1, Number(existing?.currentRound) || 1)),
     matches: status === "not-started" ? {} : Object.fromEntries(BEER_PONG_GROUP_MATCHES.map(match => [match.id, { ...match }])),
     groupEvaluated: false,
     groupRanking: [],
@@ -156,7 +157,7 @@ export function beerPongMatchList(game) {
 export function beerPongTieGroups(game) { return calculateBeerPongGroupTable(game).tieGroups; }
 
 export function resetBeerPongKnockouts(game) {
-  return { ...game, status: "running", phase: "groups", groupEvaluated: false, groupRanking: [], groupStandings: [], semifinalsReleased: false, finalReleased: false, matches: groupMatchesOnly(game.matches), ranking: [], placements: {}, points: emptyTeamValues(), winnerIds: [], resultText: "", finalReveal: false, updatedAt: Date.now() };
+  return { ...game, status: "running", phase: "groups", currentRound: Math.min(3, Math.max(1, Number(game?.currentRound) || 1)), groupEvaluated: false, groupRanking: [], groupStandings: [], semifinalsReleased: false, finalReleased: false, matches: groupMatchesOnly(game.matches), ranking: [], placements: {}, points: emptyTeamValues(), winnerIds: [], resultText: "", finalReveal: false, updatedAt: Date.now() };
 }
 
 export function resetBeerPongFinal(game) {

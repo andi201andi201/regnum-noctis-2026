@@ -140,8 +140,11 @@ Stationsrang, Gesamtwertung und Tagespunkte neu, ohne Punkte doppelt zu zählen.
 
 ## Beer Pong – Battle of the Five Realms
 
-Das Abendturnier läuft unter `games/beer-pong`. Die Gruppenphase besteht aus den
-fünf fest geplanten Paarungen. Pro Match werden die getroffenen gegnerischen
+Das Abendturnier läuft unter `games/beer-pong`. Die Gruppenphase besteht aus drei
+Zeitfenstern mit fünf fest geplanten Paarungen: In Runde 1 und 2 laufen jeweils
+zwei Matches parallel, Runde 3 enthält das letzte Gruppenspiel. Auf dem TV wird
+immer nur die von der Spielleitung aufgeschaltete Runde gross dargestellt. Pro
+Match werden die getroffenen gegnerischen
 Becher erfasst; ein Sieg gibt zwei Gruppenpunkte. Die Tabelle sortiert nach
 Gruppenpunkten, Becherdifferenz und insgesamt getroffenen Bechern. Bleiben Reiche
 exakt gleich, erfasst die Spielleitung nach einem Entscheidungswurf ihre
@@ -159,9 +162,12 @@ Der Abschluss ersetzt immer denselben Spielstand und vergibt genau einmal
 5 / 4 / 3 / 2 / 1 Tagespunkte. Für Korrekturen können Finale oder gesamte
 KO-Phase kontrolliert zurückgesetzt und neu freigegeben werden. Auf den Handys
 erscheint währenddessen nur ein kompakter Verweis auf den Grossbildschirm. Die
-TV-Ansicht wechselt in eine eigene Turnierarena und hält nach dem Finale die
-normale Tagesrangliste weiter verborgen. Erst **Regnum-Noctis-Sieger enthüllen**
-zeigt den Gesamtsieger aus allen Tagespunkten bildschirmfüllend.
+TV-Ansicht wechselt in eine eigene Turnierarena mit aktueller Runde,
+Gruppenrangliste und den phasengerechten Kurzregeln für 6 beziehungsweise 10
+Becher. Nach dem Finale bleiben Turnierresultat und neue Tagespunkte auch auf
+den Handys verborgen; dort verweist nur eine Karte auf den Grossbildschirm.
+Erst **Regnum-Noctis-Sieger enthüllen** zeigt den Gesamtsieger aus allen
+Tagespunkten bildschirmfüllend.
 
 ## Nachtjagd
 

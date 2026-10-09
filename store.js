@@ -1,8 +1,8 @@
 import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
-import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, rebuildNovitiusReveals, finalizeNovitiusGame, scoreNovitiusAnswer } from "./data.js?v=beer-pong-1";
-import { HUNT_DEFAULT_TARGETS, HUNT_POINTS_PER_OBJECT, normaliseHuntTargets, huntTargetList } from "./hunt-data.js?v=beer-pong-1";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, buildGameChallenges, normaliseGameChallengesAdmin, cleanEstimateQuestion, cleanChallengeResult, cleanEstimateValue, buildChallengePublicRound, buildPublicEstimate, calculateGameChallenges, challengeEstimateQuestions, challengeTimerRemaining, emptyChallengeTimer } from "./challenges-data.js?v=beer-pong-1";
-import { BEER_PONG, buildBeerPong, normaliseBeerPongAdmin, cleanBeerPongResult, publicBeerPongMatch, evaluateBeerPongGroups, releaseBeerPongSemifinals, releaseBeerPongFinal, completeBeerPong, resetBeerPongKnockouts, resetBeerPongFinal } from "./beer-pong-data.js?v=beer-pong-1";
+import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, rebuildNovitiusReveals, finalizeNovitiusGame, scoreNovitiusAnswer } from "./data.js?v=beer-pong-2";
+import { HUNT_DEFAULT_TARGETS, HUNT_POINTS_PER_OBJECT, normaliseHuntTargets, huntTargetList } from "./hunt-data.js?v=beer-pong-2";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, buildGameChallenges, normaliseGameChallengesAdmin, cleanEstimateQuestion, cleanChallengeResult, cleanEstimateValue, buildChallengePublicRound, buildPublicEstimate, calculateGameChallenges, challengeEstimateQuestions, challengeTimerRemaining, emptyChallengeTimer } from "./challenges-data.js?v=beer-pong-2";
+import { BEER_PONG, buildBeerPong, normaliseBeerPongAdmin, cleanBeerPongResult, publicBeerPongMatch, evaluateBeerPongGroups, releaseBeerPongSemifinals, releaseBeerPongFinal, completeBeerPong, resetBeerPongKnockouts, resetBeerPongFinal } from "./beer-pong-data.js?v=beer-pong-2";
 
 const STORAGE_KEY = "regnum-noctis-demo";
 let firebase = null;
@@ -428,7 +428,14 @@ function firebaseStore() {
       const gameRef = firebase.ref(firebase.db, `games/${BEER_PONG.id}`), game = (await firebase.get(gameRef)).val(), match = game?.matches?.[matchId];
       validateBeerPongMatchStart(game, match);
       const now = Date.now(), timed = match.stage !== "final";
-      await firebase.update(firebase.ref(firebase.db, `games/${BEER_PONG.id}/matches/${matchId}`), { status: "running", startedAt: now, endsAt: timed ? now + 6 * 60000 : 0 });
+      const updates = { [`games/${BEER_PONG.id}/matches/${matchId}/status`]: "running", [`games/${BEER_PONG.id}/matches/${matchId}/startedAt`]: now, [`games/${BEER_PONG.id}/matches/${matchId}/endsAt`]: timed ? now + 6 * 60000 : 0 };
+      if (match.stage === "group") updates[`games/${BEER_PONG.id}/currentRound`] = Number(match.round);
+      await firebase.update(firebase.ref(firebase.db), updates);
+    },
+    async setBeerPongRound(roundNumber) {
+      const round = Number(roundNumber), game = (await firebase.get(firebase.ref(firebase.db, `games/${BEER_PONG.id}`))).val();
+      if (game?.status !== "running" || game.phase !== "groups" || ![1, 2, 3].includes(round)) throw new Error("Diese Gruppenrunde kann nicht aufgeschaltet werden.");
+      await firebase.update(firebase.ref(firebase.db), { [`games/${BEER_PONG.id}/currentRound`]: round, [`games/${BEER_PONG.id}/updatedAt`]: firebase.serverTimestamp(), "settings/updatedAt": firebase.serverTimestamp() });
     },
     async saveBeerPongMatch(matchId, result) {
       const game = (await firebase.get(firebase.ref(firebase.db, `games/${BEER_PONG.id}`))).val(), match = game?.matches?.[matchId];
@@ -625,7 +632,8 @@ function localStore() {
     async finishGameChallenges() { const state = read(); state.games[GAME_CHALLENGES.id] = calculateGameChallenges(state.games[GAME_CHALLENGES.id], state.gameChallengesAdmin); state.settings.updatedAt = Date.now(); write(state); },
     async resetGameChallenges() { const state = read(); state.games[GAME_CHALLENGES.id] = buildGameChallenges("not-started", state.games[GAME_CHALLENGES.id]); state.gameChallengesAdmin = resetGameChallengesAdmin(state.gameChallengesAdmin); state.settings.updatedAt = Date.now(); write(state); },
     async startBeerPong() { const state = read(); state.games[BEER_PONG.id] = buildBeerPong("running"); state.beerPongAdmin = normaliseBeerPongAdmin(); state.settings.mode = "live"; state.settings.updatedAt = Date.now(); write(state); },
-    async startBeerPongMatch(matchId) { const state = read(), game = state.games[BEER_PONG.id], match = game?.matches?.[matchId]; validateBeerPongMatchStart(game, match); const now = Date.now(); match.status = "running"; match.startedAt = now; match.endsAt = match.stage === "final" ? 0 : now + 6 * 60000; write(state); },
+    async startBeerPongMatch(matchId) { const state = read(), game = state.games[BEER_PONG.id], match = game?.matches?.[matchId]; validateBeerPongMatchStart(game, match); const now = Date.now(); match.status = "running"; match.startedAt = now; match.endsAt = match.stage === "final" ? 0 : now + 6 * 60000; if (match.stage === "group") game.currentRound = Number(match.round); write(state); },
+    async setBeerPongRound(roundNumber) { const state = read(), game = state.games[BEER_PONG.id], round = Number(roundNumber); if (game?.status !== "running" || game.phase !== "groups" || ![1, 2, 3].includes(round)) throw new Error("Diese Gruppenrunde kann nicht aufgeschaltet werden."); game.currentRound = round; game.updatedAt = Date.now(); state.settings.updatedAt = Date.now(); write(state); },
     async saveBeerPongMatch(matchId, result) { const state = read(), match = state.games[BEER_PONG.id]?.matches?.[matchId]; if (!match) throw new Error("Match nicht gefunden."); state.beerPongAdmin = normaliseBeerPongAdmin(state.beerPongAdmin); state.beerPongAdmin.drafts[matchId] = cleanBeerPongResult(match, result); state.beerPongAdmin.updatedAt = Date.now(); write(state); },
     async publishBeerPongMatch(matchId) { const state = read(); state.beerPongAdmin = normaliseBeerPongAdmin(state.beerPongAdmin); state.games[BEER_PONG.id] = publishBeerPongDraft(state.games[BEER_PONG.id], state.beerPongAdmin, matchId); delete state.beerPongAdmin.drafts[matchId]; state.settings.updatedAt = Date.now(); write(state); },
     async saveBeerPongTieBreakRanks(ranks) { const state = read(); state.beerPongAdmin = normaliseBeerPongAdmin(state.beerPongAdmin); state.beerPongAdmin.tieBreakRanks = cleanBeerPongTieBreakRanks(ranks); state.beerPongAdmin.updatedAt = Date.now(); write(state); },

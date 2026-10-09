@@ -1,6 +1,6 @@
-import { getStore } from "./store.js?v=beer-pong-1";
+import { getStore } from "./store.js?v=beer-pong-2";
 import { getPlayerProfile } from "./player.js";
-import { huntProgress } from "./hunt-data.js?v=beer-pong-1";
+import { huntProgress } from "./hunt-data.js?v=beer-pong-2";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();

@@ -1,8 +1,8 @@
-import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=beer-pong-1";
-import { getStore } from "./store.js?v=beer-pong-1";
+import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=beer-pong-2";
+import { getStore } from "./store.js?v=beer-pong-2";
 import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js";
-import { GAME_CHALLENGES } from "./challenges-data.js?v=beer-pong-1";
-import { BEER_PONG } from "./beer-pong-data.js?v=beer-pong-1";
+import { GAME_CHALLENGES } from "./challenges-data.js?v=beer-pong-2";
+import { BEER_PONG } from "./beer-pong-data.js?v=beer-pong-2";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -19,7 +19,6 @@ window.addEventListener("regnum-player-changed", () => {
     maybeCelebrateGameWinner(currentState.games?.[SONG_BATTLE.id], SONG_BATTLE.id);
     maybeCelebrateGameWinner(currentState.games?.[NOVITIUS_GAME.id], NOVITIUS_GAME.id);
     maybeCelebrateGameWinner(currentState.games?.[GAME_CHALLENGES.id], GAME_CHALLENGES.id);
-    maybeCelebrateGameWinner(currentState.games?.[BEER_PONG.id], BEER_PONG.id);
   }
 });
 $("#victoryCelebration").addEventListener("click", hideVictoryCelebration);
@@ -109,8 +108,10 @@ function setupOnboarding() {
 function render(state) {
   currentState = state;
   const mode = state.settings.mode || "live";
-  const games = sortedGames(state.games).filter(hasGameResult);
-  const totals = totalsFromGames(state.games);
+  const beerPongGame = state.games?.[BEER_PONG.id], beerPongAwaitingReveal = beerPongGame?.status === "completed" && !beerPongGame.finalReveal;
+  const games = sortedGames(state.games).filter(hasGameResult).filter(game => !(game.id === BEER_PONG.id && beerPongAwaitingReveal));
+  const visibleGames = beerPongAwaitingReveal ? { ...state.games, [BEER_PONG.id]: { ...beerPongGame, points: Object.fromEntries(TEAMS.map(team => [team.id, 0])) } } : state.games;
+  const totals = totalsFromGames(visibleGames);
   const ranking = [...TEAMS].sort((a, b) => totals[b.id] - totals[a.id] || a.name.localeCompare(b.name));
   const leader = ranking[0];
   const hasResults = games.length > 0;
@@ -127,9 +128,11 @@ function render(state) {
   if (novitiusGame?.status === "completed") maybeCelebrateGameWinner(novitiusGame, NOVITIUS_GAME.id);
   const challengesGame = state.games[GAME_CHALLENGES.id];
   if (challengesGame?.status === "completed") maybeCelebrateGameWinner(challengesGame, GAME_CHALLENGES.id);
-  const beerPongGame = state.games[BEER_PONG.id];
-  $("#beerPongCard").classList.toggle("hidden", beerPongGame?.status !== "running");
-  if (beerPongGame?.status === "completed") maybeCelebrateGameWinner(beerPongGame, BEER_PONG.id);
+  const beerPongCardVisible = beerPongGame?.status === "running" || beerPongAwaitingReveal;
+  $("#beerPongCard").classList.toggle("hidden", !beerPongCardVisible);
+  $("#beerPongCard").classList.toggle("awaiting-reveal", beerPongAwaitingReveal);
+  $("#beerPongPublicTitle").textContent = beerPongAwaitingReveal ? "Beer Pong ist entschieden" : "Beer Pong läuft";
+  $("#beerPongPublicText").textContent = beerPongAwaitingReveal ? "Das Resultat und die Siegerverkündung siehst du jetzt auf dem grossen Bildschirm." : "Verfolge das Turnier auf dem grossen Bildschirm.";
 
   $("#leaderboard").innerHTML = ranking.map((team, index) => `
     <li class="rank-card ${index === 0 && hasResults ? "leader" : ""}" style="--team:${team.color};--glow:${team.glow}">

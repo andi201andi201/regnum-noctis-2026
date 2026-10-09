@@ -1,8 +1,8 @@
-import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=beer-pong-1";
-import { getStore } from "./store.js?v=beer-pong-1";
-import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=beer-pong-1";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, CHALLENGE_STATIONS, normaliseGameChallengesAdmin, challengeEstimateQuestions, stationById, challengeTimerRemaining, calculateGameChallenges } from "./challenges-data.js?v=beer-pong-1";
-import { BEER_PONG, normaliseBeerPongAdmin, beerPongMatchList, calculateBeerPongGroupTable, beerPongTieGroups } from "./beer-pong-data.js?v=beer-pong-1";
+import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=beer-pong-2";
+import { getStore } from "./store.js?v=beer-pong-2";
+import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=beer-pong-2";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, CHALLENGE_STATIONS, normaliseGameChallengesAdmin, challengeEstimateQuestions, stationById, challengeTimerRemaining, calculateGameChallenges } from "./challenges-data.js?v=beer-pong-2";
+import { BEER_PONG, normaliseBeerPongAdmin, beerPongMatchList, calculateBeerPongGroupTable, beerPongTieGroups } from "./beer-pong-data.js?v=beer-pong-2";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
@@ -160,6 +160,8 @@ $("#finishGameChallenges").addEventListener("click", async () => { const button 
 $("#startBeerPong").addEventListener("click", async () => { if (!confirm("Beer-Pong-Turnier jetzt starten und den Turniermodus auf dem Grossbildschirm aktivieren?")) return; await withDisabled($("#startBeerPong"), async () => { await store.startBeerPong(); toast("Beer-Pong-Turnier gestartet"); }); });
 $("#resetBeerPong").addEventListener("click", async () => { const running = currentState?.games?.[BEER_PONG.id]?.status === "running"; const message = running ? "Beer-Pong-Turnier abbrechen? Die Turnieransicht verschwindet sofort. Alle Matchresultate dieses Turniers werden gelöscht." : "Beer-Pong-Turnier vollständig zurücksetzen? Platzierung und Tagespunkte werden entfernt."; if (!confirm(message)) return; await withDisabled($("#resetBeerPong"), async () => { await store.resetBeerPong(); toast(running ? "Beer-Pong-Turnier abgebrochen" : "Beer-Pong-Turnier zurückgesetzt"); }); });
 $("#beerPongMatches").addEventListener("click", async event => {
+  const round = event.target.closest("button[data-bp-round]");
+  if (round) { try { await store.setBeerPongRound(Number(round.dataset.bpRound)); toast(`Runde ${round.dataset.bpRound} ist auf dem TV`); } catch (error) { beerPongError(error); } return; }
   const start = event.target.closest("button[data-bp-start]");
   if (start) { try { await store.startBeerPongMatch(start.dataset.bpStart); toast("Match läuft · TV aktualisiert"); } catch (error) { beerPongError(error); } return; }
   const publish = event.target.closest("button[data-bp-publish]");
@@ -309,8 +311,9 @@ function renderBeerPongAdmin(state) {
   $("#beerPongPhase").textContent = phaseLabels[game.phase] || phaseLabels.groups;
   $("#beerPongPhaseHelp").textContent = phaseHelp[game.phase] || "";
 
-  const matches = beerPongMatchList(game);
-  $("#beerPongMatches").innerHTML = matches.map(match => renderBeerPongMatchAdmin(game, match, running)).join("");
+  const matches = beerPongMatchList(game), currentRound = Math.min(3, Math.max(1, Number(game.currentRound) || 1));
+  const roundControls = running && game.phase === "groups" ? `<div class="beer-pong-round-switch"><span>Auf dem TV anzeigen:</span>${[1, 2, 3].map(round => `<button type="button" data-bp-round="${round}" class="${currentRound === round ? "active" : ""}">Runde ${round}</button>`).join("")}</div>` : "";
+  $("#beerPongMatches").innerHTML = roundControls + matches.map(match => renderBeerPongMatchAdmin(game, match, running)).join("");
 
   const table = calculateBeerPongGroupTable(game, beerPongAdmin.tieBreakRanks);
   $("#beerPongGroupTable").innerHTML = `<div class="beer-pong-table-head"><span>#</span><span>Reich</span><span>Sp</span><span>S</span><span>P</span><span>Diff.</span><span>Treffer</span></div>${table.standings.map(row => {
