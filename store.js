@@ -1,7 +1,7 @@
 import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
-import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, rebuildNovitiusReveals, finalizeNovitiusGame, scoreNovitiusAnswer } from "./data.js?v=challenges-1";
-import { HUNT_DEFAULT_TARGETS, HUNT_POINTS_PER_OBJECT, normaliseHuntTargets, huntTargetList } from "./hunt-data.js?v=challenges-1";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, buildGameChallenges, normaliseGameChallengesAdmin, cleanEstimateQuestion, cleanChallengeResult, cleanEstimateValue, buildChallengePublicRound, buildPublicEstimate, calculateGameChallenges, challengeEstimateQuestions, challengeTimerRemaining, emptyChallengeTimer } from "./challenges-data.js?v=challenges-1";
+import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, rebuildNovitiusReveals, finalizeNovitiusGame, scoreNovitiusAnswer } from "./data.js?v=challenges-2";
+import { HUNT_DEFAULT_TARGETS, HUNT_POINTS_PER_OBJECT, normaliseHuntTargets, huntTargetList } from "./hunt-data.js?v=challenges-2";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, buildGameChallenges, normaliseGameChallengesAdmin, cleanEstimateQuestion, cleanChallengeResult, cleanEstimateValue, buildChallengePublicRound, buildPublicEstimate, calculateGameChallenges, challengeEstimateQuestions, challengeTimerRemaining, emptyChallengeTimer } from "./challenges-data.js?v=challenges-2";
 
 const STORAGE_KEY = "regnum-noctis-demo";
 let firebase = null;
@@ -655,7 +655,7 @@ function applyChallengeRoundEntries(value, roundNumber, entries = {}) {
   TEAMS.forEach(team => {
     const stationId = assignments[team.id], entry = entries[team.id] || {};
     if (stationId === "estimate") {
-      activeQuestions.forEach(question => { question.estimates[team.id] = cleanEstimateValue(entry.estimates?.[question.id]); });
+      activeQuestions.forEach(question => { admin.estimateQuestions[question.id].estimates[team.id] = cleanEstimateValue(entry.estimates?.[question.id]); });
     } else {
       ((admin.results[stationId] ||= {}))[team.id] = cleanChallengeResult(stationId, entry.value);
     }

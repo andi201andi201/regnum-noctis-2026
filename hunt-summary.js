@@ -1,6 +1,6 @@
-import { getStore } from "./store.js?v=challenges-1";
+import { getStore } from "./store.js?v=challenges-2";
 import { getPlayerProfile } from "./player.js";
-import { huntProgress } from "./hunt-data.js?v=challenges-1";
+import { huntProgress } from "./hunt-data.js?v=challenges-2";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();

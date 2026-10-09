@@ -1,7 +1,7 @@
-import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=challenges-1";
-import { getStore } from "./store.js?v=challenges-1";
-import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=challenges-1";
-import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, CHALLENGE_STATIONS, normaliseGameChallengesAdmin, challengeEstimateQuestions, stationById, challengeTimerRemaining, calculateGameChallenges } from "./challenges-data.js?v=challenges-1";
+import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking, scoreNovitiusAnswer, novitiusTieGroups } from "./data.js?v=challenges-2";
+import { getStore } from "./store.js?v=challenges-2";
+import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=challenges-2";
+import { GAME_CHALLENGES, GAME_CHALLENGE_ROTATIONS, CHALLENGE_STATIONS, normaliseGameChallengesAdmin, challengeEstimateQuestions, stationById, challengeTimerRemaining, calculateGameChallenges } from "./challenges-data.js?v=challenges-2";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
