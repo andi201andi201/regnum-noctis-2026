@@ -41,8 +41,8 @@ function renderBalloonMonster(state) {
 
 function balloonMonsterArena(game) {
   const phase = game.phase === "spinning" && Date.now() >= Number(game.spin?.endsAt || 0) ? "selected" : game.phase;
-  const team = teamById(game.currentTeamId), ranking = balloonRanking(game.publicResults);
-  const head = `<header class="balloon-tv-head"><div><p class="eyebrow">Spiel 1 · Die Prüfung der fünf Reiche</p><h1>🎈 Ballon-Monster</h1></div><span>${game.status === "completed" ? "Abgeschlossen" : `${Number(game.remainingTeamIds?.length || 0)} Reiche im Rad`}</span></header>`;
+  const team = teamById(game.currentTeamId), ranking = balloonRanking(game.publicResults), wheelCount = Number(game.remainingTeamIds?.length || 0) + (phase === "spinning" ? 1 : 0);
+  const head = `<header class="balloon-tv-head"><div><p class="eyebrow">Spiel 1 · Die Prüfung der fünf Reiche</p><h1>🎈 Ballon-Monster</h1></div><span>${game.status === "completed" ? "Abgeschlossen" : `${wheelCount} Reiche im Rad`}</span></header>`;
   if (game.status === "completed") return `${head}<div class="balloon-tv-final"><p>DIE PRÜFUNG IST ENTSCHIEDEN</p><h2>Endrangliste</h2>${balloonTvRanking(game, ranking, true)}<strong>${(game.winnerIds || []).map(id => teamById(id)?.name).join(" & ")} triumphiert${(game.winnerIds || []).length > 1 ? "en" : ""}!</strong></div>`;
   if ((phase === "intro" || phase === "wheel") && !team) return `${head}<div class="balloon-tv-intro"><div class="balloon-orbit">${TEAMS.map((item, index) => `<img src="${item.logo}" alt="" style="--i:${index};--team:${item.color}">`).join("")}</div><p>DIE PRÜFUNG DER FÜNF REICHE</p><h2>${phase === "intro" ? "Das Ballon-Monster erwacht" : "Das Glücksrad ist bereit"}</h2></div>`;
   if (phase === "spinning") return `${head}${balloonWheel(game)}<p class="balloon-wheel-call">DAS SCHICKSAL ENTSCHEIDET …</p>`;
