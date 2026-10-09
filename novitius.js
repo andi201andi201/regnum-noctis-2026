@@ -1,5 +1,5 @@
-import { TEAMS, NOVITIUS_GAME } from "./data.js?v=games-3";
-import { getStore } from "./store.js?v=games-3";
+import { TEAMS, NOVITIUS_GAME } from "./data.js?v=hunt-2";
+import { getStore } from "./store.js?v=hunt-2";
 import { getPlayerProfile } from "./player.js";
 
 const $ = selector => document.querySelector(selector);

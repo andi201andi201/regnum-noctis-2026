@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050611"><meta name="description" content="Die Nachtjagd von Regnum Noctis">
+  <title>Nachtjagd · Regnum Noctis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=hunt-2">
+</head>
+<body class="hunt-page">
+  <div class="stars" aria-hidden="true"></div><div class="hunt-mist" aria-hidden="true"></div>
+  <header class="hunt-page-header shell"><a href="index.html" class="back-link">← Zur Rangliste</a><span id="huntPlayerBadge"></span></header>
+  <main class="hunt-page-main shell">
+    <section class="hunt-page-hero">
+      <div class="hunt-moon">☾</div><p class="eyebrow">Zusätzliche Tagesmission</p>
+      <h1>Die Nachtjagd hat begonnen</h1>
+      <p>Findet die verborgenen Gegenstände.<br>Entschlüsselt die Hinweise.<br>Jeder Fund stärkt euer Reich.</p>
+      <div class="hunt-page-progress"><div><span>Euer Fortschritt</span><strong id="huntPageCount">0 / 10</strong></div><i><b id="huntPageProgressBar"></b></i></div>
+      <div id="huntEndedNotice" class="hunt-ended-notice hidden">Die Nachtjagd wurde beendet. Eure Funde bleiben bestehen.</div>
+    </section>
+    <section id="huntNoProfile" class="panel hidden"><h2>Name und Reich fehlen</h2><p>Bitte gehe zuerst zur Rangliste und wähle deinen Namen und dein Reich.</p><a class="primary-button" href="index.html">Zur Rangliste</a></section>
+    <section id="huntNotStarted" class="panel hidden"><h2>Die Tore sind noch verschlossen</h2><p>Die Spielleitung startet die Nachtjagd am Morgen.</p></section>
+    <section id="huntMissionGrid" class="hunt-mission-grid"></section>
+    <section class="hunt-history-section"><div class="section-head compact"><div><p class="eyebrow">Chronik eures Reiches</p><h2>Eure Funde</h2></div></div><div id="huntTeamHistory" class="hunt-team-history"></div></section>
+  </main>
+
+  <section id="huntScanner" class="hunt-scanner-overlay hidden" aria-live="polite">
+    <div class="hunt-scanner-head"><button id="closeHuntScanner" type="button">← Schliessen</button><div><small id="scannerObjectNumber">Gegenstand 1</small><strong id="scannerClue"></strong></div></div>
+    <div class="camera-frame"><video id="huntVideo" playsinline muted></video><canvas id="huntOverlay" aria-hidden="true"></canvas><div class="scan-corners" aria-hidden="true"></div></div>
+    <div class="hunt-progress"><i id="huntProgress"></i></div><p id="huntStatus" class="hunt-status">Kamera wird vorbereitet …</p>
+  </section>
+
+  <section id="huntFeedback" class="hunt-feedback hidden" aria-live="assertive">
+    <div><span id="huntFeedbackIcon">✓</span><p class="eyebrow" id="huntFeedbackKicker">Richtig</p><h2 id="huntFeedbackTitle"></h2><p id="huntFeedbackText"></p><button id="closeHuntFeedback" class="primary-button" type="button">Weiter zur Nachtjagd</button></div>
+  </section>
+  <script type="module" src="hunt.js?v=hunt-2"></script>
+</body>
+</html>

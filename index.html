@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=games-3">
+  <link rel="stylesheet" href="styles.css?v=hunt-2">
 </head>
 <body>
   <div class="stars" aria-hidden="true"></div>
@@ -53,60 +53,10 @@
       <p>Die letzten Punkte werden im Verborgenen gezählt. Welches Reich wird über die Nacht herrschen?</p>
     </section>
 
-    <section id="huntCard" class="hunt-card hidden">
-      <div class="hunt-topline"><span class="hunt-rune">✦</span><span>Nachtjagd · Die zehn Zeichen</span><strong id="huntTimer">Versiegelt</strong></div>
-      <div id="huntLocked" class="hunt-intro">
-        <p class="eyebrow">Das Orakel schweigt noch</p>
-        <h2>Die Nachtjagd wartet</h2>
-        <p>Die Spielleitung öffnet die Jagd zur festgelegten Zeit. Dann habt ihr zwölf Minuten, um gemeinsam zehn Zeichen der Nacht zu finden.</p>
-      </div>
-      <div id="huntIntro" class="hunt-intro hidden">
-        <div class="hunt-heading"><div><p class="eyebrow">Gemeinsamer Teamauftrag</p><h2>Findet die zehn Zeichen</h2></div><strong id="huntCount">0 / 10</strong></div>
-        <p>Jeder Gegenstand zählt pro Reich einmal und bringt zwei Punkte. Ihr könnt mit mehreren Handys gleichzeitig suchen.</p>
-        <div id="huntTargets" class="hunt-targets"></div>
-        <button id="startHunt" class="hunt-button" type="button">Kamera starten</button>
-      </div>
-      <div id="huntCamera" class="hunt-camera hidden">
-        <div class="camera-frame">
-          <video id="huntVideo" playsinline muted aria-label="Kamerabild für die Gegenstandserkennung"></video>
-          <canvas id="huntOverlay" aria-hidden="true"></canvas>
-          <div class="scan-corners" aria-hidden="true"></div>
-        </div>
-        <div class="hunt-progress"><i id="huntProgress"></i></div>
-        <p id="huntStatus" class="hunt-status" aria-live="polite">Erkennung wird geladen …</p>
-        <button id="cancelHunt" class="hunt-cancel" type="button">Kamera schliessen</button>
-      </div>
-      <div id="huntSuccess" class="hunt-success hidden" aria-live="polite">
-        <div class="success-seal">✓</div>
-        <p class="eyebrow">Zeichen bestätigt</p>
-        <h2 id="huntSuccessTitle">Gegenstand erkannt</h2>
-        <p id="huntSuccessText">Die Punkte werden deinem Reich gutgeschrieben.</p>
-        <strong id="huntProof"></strong>
-        <button id="restartHunt" class="hunt-button" type="button">Weitersuchen</button>
-      </div>
-    </section>
-
-    <section id="oracleCard" class="oracle-card hidden" aria-live="polite">
-      <div class="hunt-topline"><span class="hunt-rune">☾</span><span>Das Orakel</span><strong id="oracleTimer"></strong></div>
-      <div id="oracleQuestion" class="oracle-content">
-        <p class="eyebrow">Eine Antwort pro Reich</p>
-        <h2 id="oracleQuestionText"></h2>
-        <p>Beratet euch gut. Die erste übermittelte Antwort eures Reiches wird versiegelt. <strong id="oraclePointsHint"></strong></p>
-        <form id="oracleAnswerForm"><div class="oracle-answer-row"><input id="oracleAnswer" type="number" inputmode="decimal" step="any" required placeholder="Eure Schätzung"><span id="oracleUnit"></span></div><button class="hunt-button" type="submit">Antwort versiegeln</button></form>
-        <div id="oracleSealed" class="oracle-sealed hidden"><div>✓</div><strong>Antwort versiegelt</strong><span id="oracleOwnAnswer"></span></div>
-      </div>
-      <div id="oracleWaiting" class="oracle-content hidden"><p class="eyebrow">Die Zeit ist abgelaufen</p><h2>Das Orakel entscheidet</h2><p>Die Spielleitung wertet die Antworten aus.</p></div>
-      <div id="oracleReveal" class="oracle-content hidden"><p class="eyebrow">Das Orakel hat gesprochen</p><h2 id="oracleSolution"></h2><div id="oracleResults" class="oracle-results"></div></div>
-    </section>
-
     <div id="liveContent">
-      <section id="ballonGameCard" class="ballon-card hidden" aria-labelledby="ballonGameName" aria-live="polite">
-        <div class="hunt-topline"><span>Vormittag · ca. 15 Minuten</span><strong id="ballonGameStatus">Läuft</strong></div>
-        <div class="ballon-content">
-          <p class="eyebrow">Aktuelles Spiel</p><h2 id="ballonGameName">Ballon Game</h2>
-          <p id="ballonGameDescription"></p>
-          <p class="ballon-scoring">Platz 1–5: 5 / 4 / 3 / 2 / 1 Punkte</p>
-        </div>
+      <section id="huntSummaryCard" class="hunt-summary-card hidden" aria-live="polite">
+        <div><span class="hunt-summary-moon">🌙</span><div><p class="eyebrow">Ganztägige Challenge</p><h2>Nachtjagd</h2><p id="huntSummaryStatus">Die Jagd läuft</p></div><strong id="huntSummaryCount">0 / 10</strong></div>
+        <a id="openHuntPage" class="primary-button" href="nachtjagd.html">Nachtjagd öffnen</a>
       </section>
 
       <section id="songBattleCard" class="song-battle-card hidden" aria-labelledby="songBattleName" aria-live="polite">
@@ -204,9 +154,8 @@
     </div>
   </section>
   <canvas id="confetti" aria-hidden="true"></canvas>
-  <script type="module" src="app.js?v=games-3"></script>
-  <script type="module" src="hunt.js?v=games-3"></script>
-  <script type="module" src="oracle.js?v=games-3"></script>
-  <script type="module" src="novitius.js?v=games-3"></script>
+  <script type="module" src="app.js?v=hunt-2"></script>
+  <script type="module" src="hunt-summary.js?v=hunt-2"></script>
+  <script type="module" src="novitius.js?v=hunt-2"></script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
-import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, buildNovitiusReveal, finalizeNovitiusGame } from "./data.js?v=games-3";
+import { EMPTY_STATE, TEAMS, SONG_BATTLE, NOVITIUS_GAME, NOVITIUS_DEFAULT_QUESTIONS, buildSongBattle, songBattleScores, finalizeSongBattle, buildNovitiusGame, buildNovitiusReveal, finalizeNovitiusGame } from "./data.js?v=hunt-2";
+import { HUNT_DEFAULT_TARGETS, HUNT_POINTS_PER_OBJECT, normaliseHuntTargets, huntTargetList } from "./hunt-data.js?v=hunt-2";
 
 const STORAGE_KEY = "regnum-noctis-demo";
 let firebase = null;
@@ -40,6 +41,7 @@ function firebaseStore() {
     subscribeNovitiusAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "novitiusAdmin"), snapshot => callback(normaliseNovitiusAdmin(snapshot.val()))); },
     subscribeNovitiusParticipants(callback) { return firebase.onValue(firebase.ref(firebase.db, "novitiusParticipants"), snapshot => callback(snapshot.val() || {})); },
     subscribeNovitiusAnswers(callback) { return firebase.onValue(firebase.ref(firebase.db, "novitiusAnswers"), snapshot => callback(snapshot.val() || {})); },
+    subscribeHuntAdmin(callback) { return firebase.onValue(firebase.ref(firebase.db, "huntAdmin"), snapshot => callback({ targets: normaliseHuntTargets(snapshot.val()?.targets) })); },
     async subscribeSongBattleTeam(teamId, callback) {
       if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
       let answers = {}, participant = null;
@@ -286,27 +288,34 @@ function firebaseStore() {
         "settings/updatedAt": firebase.serverTimestamp()
       });
     },
-    async claimChallenge(challengeId, profile, points) {
-      if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
-      const uid = firebase.auth.currentUser.uid;
-      const gameId = `challenge-${challengeId}-${uid}`;
-      const gameRef = firebase.ref(firebase.db, `games/${gameId}`);
-      let created = false;
-      const result = await firebase.runTransaction(gameRef, current => {
-        if (current) return;
-        created = true;
-        return challengeGame(challengeId, profile, points, uid);
-      });
-      return { awarded: created && result.committed, teamId: result.snapshot.val()?.teamId || profile.teamId };
-    },
     deleteGame: id => firebase.remove(firebase.ref(firebase.db, `games/${id}`)),
     setMode: mode => firebase.update(firebase.ref(firebase.db, "settings"), { mode, updatedAt: firebase.serverTimestamp() }),
-    startHunt(minutes) {
-      const startedAt = Date.now();
-      return firebase.set(firebase.ref(firebase.db, "settings/hunt"), { active: true, roundId: startedAt.toString(36), startedAt, endsAt: startedAt + minutes * 60000 });
+    async saveHuntTarget(targetId, target) {
+      const clean = cleanHuntTarget(targetId, target);
+      return firebase.set(firebase.ref(firebase.db, `huntAdmin/targets/${targetId}`), clean);
     },
-    stopHunt() { return firebase.update(firebase.ref(firebase.db, "settings/hunt"), { active: false }); },
-    async claimHuntObject(roundId, target, profile, points) {
+    async startHunt() {
+      const current = (await firebase.get(firebase.ref(firebase.db, "settings/hunt"))).val();
+      if (current?.roundId) throw new Error("Bitte die bisherige Nachtjagd zuerst zurücksetzen.");
+      const admin = (await firebase.get(firebase.ref(firebase.db, "huntAdmin/targets"))).val();
+      const targets = huntTargetList(admin).map(publicHuntTarget);
+      if (!targets.length) throw new Error("Mindestens ein Gegenstand muss aktiv sein.");
+      const startedAt = Date.now(), roundId = startedAt.toString(36);
+      await firebase.update(firebase.ref(firebase.db), {
+        "huntAdmin/targets": normaliseHuntTargets(admin),
+        "settings/hunt": { active: true, roundId, startedAt, stoppedAt: 0, targetCount: targets.length, targets: Object.fromEntries(targets.map(target => [target.id, target])) },
+        "settings/updatedAt": firebase.serverTimestamp()
+      });
+    },
+    stopHunt() { return firebase.update(firebase.ref(firebase.db), { "settings/hunt/active": false, "settings/hunt/stoppedAt": firebase.serverTimestamp(), "settings/updatedAt": firebase.serverTimestamp() }); },
+    async resetHunt() {
+      const games = (await firebase.get(firebase.ref(firebase.db, "games"))).val() || {};
+      const updates = { "settings/hunt": { active: false, roundId: "", startedAt: 0, stoppedAt: 0, targetCount: 10, targets: {} }, "settings/updatedAt": firebase.serverTimestamp() };
+      Object.entries(games).filter(([, game]) => game?.source === "team-hunt" || game?.source === "ballon-game" || game?.source === "oracle").forEach(([id]) => { updates[`games/${id}`] = null; });
+      updates["games/ballon-game"] = null;
+      return firebase.update(firebase.ref(firebase.db), updates);
+    },
+    async claimHuntObject(roundId, target, profile) {
       if (!firebase.auth.currentUser) await firebase.signInAnonymously(firebase.auth);
       const gameId = `hunt-${roundId}-${profile.teamId}-${target.id}`;
       const gameRef = firebase.ref(firebase.db, `games/${gameId}`);
@@ -314,9 +323,24 @@ function firebaseStore() {
       const result = await firebase.runTransaction(gameRef, current => {
         if (current) return;
         created = true;
-        return huntGame(roundId, target, profile, points, firebase.auth.currentUser.uid);
+        return huntGame(roundId, target, profile, firebase.auth.currentUser.uid);
       });
-      return { awarded: created && result.committed, teamId: result.snapshot.val()?.teamId || profile.teamId };
+      return { awarded: created && result.committed, find: result.snapshot.val() };
+    },
+    async addHuntFind(roundId, targetId, teamId, playerName) {
+      const hunt = (await firebase.get(firebase.ref(firebase.db, "settings/hunt"))).val();
+      const target = hunt?.targets?.[targetId];
+      if (!hunt?.roundId || hunt.roundId !== roundId || !target || !TEAMS.some(team => team.id === teamId)) throw new Error("Ungültiger Nachtjagd-Fund.");
+      const gameId = `hunt-${roundId}-${teamId}-${targetId}`;
+      const gameRef = firebase.ref(firebase.db, `games/${gameId}`);
+      let created = false;
+      const profile = { id: "admin", name: String(playerName || "Spielleitung").trim().slice(0, 32) || "Spielleitung", teamId };
+      const result = await firebase.runTransaction(gameRef, current => { if (current) return; created = true; return huntGame(roundId, target, profile, firebase.auth.currentUser?.uid || "admin", true); });
+      if (created && result.committed) await firebase.update(firebase.ref(firebase.db, "settings"), { updatedAt: firebase.serverTimestamp() });
+      return { awarded: created && result.committed, find: result.snapshot.val() };
+    },
+    async removeHuntFind(roundId, targetId, teamId) {
+      await firebase.update(firebase.ref(firebase.db), { [`games/hunt-${roundId}-${teamId}-${targetId}`]: null, "settings/updatedAt": firebase.serverTimestamp() });
     },
     startOracle({ question, answer, unit, minutes, maxPoints = 5 }) {
       const startedAt = Date.now();
@@ -371,6 +395,7 @@ function localStore() {
     subscribeNovitiusAdmin(callback) { const listener = state => callback(normaliseNovitiusAdmin(state.novitiusAdmin)); listeners.add(listener); callback(normaliseNovitiusAdmin(read().novitiusAdmin)); return () => listeners.delete(listener); },
     subscribeNovitiusParticipants(callback) { const listener = state => callback(state.novitiusParticipants || {}); listeners.add(listener); callback(read().novitiusParticipants || {}); return () => listeners.delete(listener); },
     subscribeNovitiusAnswers(callback) { const listener = state => callback(state.novitiusAnswers || {}); listeners.add(listener); callback(read().novitiusAnswers || {}); return () => listeners.delete(listener); },
+    subscribeHuntAdmin(callback) { const listener = state => callback({ targets: normaliseHuntTargets(state.huntAdmin?.targets) }); listeners.add(listener); listener(read()); return () => listeners.delete(listener); },
     async subscribeSongBattleTeam(teamId, callback) { const listener = state => { const participant = state.songBattleParticipants?.[teamId] || null; callback({ answers: state.songBattleAnswers?.[teamId] || {}, participant, owned: participant?.claimantId === getLocalProfileId() }); }; listeners.add(listener); listener(read()); return () => listeners.delete(listener); },
     async subscribeNovitiusPlayer(callback) { const participantId = getLocalProfileId(); const listener = state => callback({ participantId, participant: state.novitiusParticipants?.[participantId] || null, answers: state.novitiusAnswers?.[participantId] || {} }); listeners.add(listener); listener(read()); return () => listeners.delete(listener); },
     async saveOracleQuestion(question, id = null) { const state = read(); state.oracleQuestions[id || `question-${Date.now()}`] = { ...question, updatedAt: Date.now() }; write(state); },
@@ -398,30 +423,25 @@ function localStore() {
     async revealNovitiusQuestion(questionNumber) { const state = read(); const game = state.games[NOVITIUS_GAME.id]; if (game?.status !== "running" || Number(game.currentQuestion) !== Number(questionNumber) || game.answersOpen) throw new Error("Antworten zuerst sperren."); const question = normaliseNovitiusAdmin(state.novitiusAdmin).questions[`question-${questionNumber}`]; const questionAnswers = Object.fromEntries(Object.entries(state.novitiusAnswers).map(([id, values]) => [id, values?.[`question-${questionNumber}`]]).filter(([, answer]) => answer)); const reveal = buildNovitiusReveal(question, state.novitiusParticipants, questionAnswers); (game.revealedQuestions ||= {})[`question-${questionNumber}`] = true; (game.publicReveals ||= {})[`question-${questionNumber}`] = reveal; game.controlUpdatedAt = Date.now(); write(state); },
     async finishNovitiusGame() { const state = read(); state.games[NOVITIUS_GAME.id] = finalizeNovitiusGame(state.games[NOVITIUS_GAME.id], normaliseNovitiusAdmin(state.novitiusAdmin).questions, state.novitiusParticipants, state.novitiusAnswers); state.settings.updatedAt = Date.now(); write(state); },
     async resetNovitiusGame() { const state = read(); state.games[NOVITIUS_GAME.id] = buildNovitiusGame("not-started", state.games[NOVITIUS_GAME.id]); state.novitiusParticipants = {}; state.novitiusAnswers = {}; state.settings.updatedAt = Date.now(); write(state); },
-    async claimChallenge(challengeId, profile, points) {
-      const state = read();
-      const id = `challenge-${challengeId}-${profile.id}`;
-      if (state.games[id]) return { awarded: false, teamId: state.games[id].teamId };
-      state.games[id] = challengeGame(challengeId, profile, points, profile.id);
-      state.settings.updatedAt = Date.now();
-      write(state);
-      return { awarded: true, teamId: profile.teamId };
-    },
     async deleteGame(id) { const state = read(); delete state.games[id]; state.settings.updatedAt = Date.now(); write(state); },
     async setMode(mode) { const state = read(); state.settings = { ...state.settings, mode, updatedAt: Date.now() }; write(state); },
-    async startHunt(minutes) { const state = read(); const startedAt = Date.now(); state.settings.hunt = { active: true, roundId: startedAt.toString(36), startedAt, endsAt: startedAt + minutes * 60000 }; write(state); },
-    async stopHunt() { const state = read(); state.settings.hunt = { ...(state.settings.hunt || {}), active: false }; write(state); },
-    async claimHuntObject(roundId, target, profile, points) {
+    async saveHuntTarget(targetId, target) { const state = read(); state.huntAdmin ||= { targets: {} }; state.huntAdmin.targets = normaliseHuntTargets(state.huntAdmin.targets); state.huntAdmin.targets[targetId] = cleanHuntTarget(targetId, target); write(state); },
+    async startHunt() { const state = read(); if (state.settings.hunt?.roundId) throw new Error("Bitte die bisherige Nachtjagd zuerst zurücksetzen."); state.huntAdmin ||= { targets: {} }; state.huntAdmin.targets = normaliseHuntTargets(state.huntAdmin.targets); const targets = huntTargetList(state.huntAdmin.targets).map(publicHuntTarget); if (!targets.length) throw new Error("Mindestens ein Gegenstand muss aktiv sein."); const startedAt = Date.now(); state.settings.hunt = { active: true, roundId: startedAt.toString(36), startedAt, stoppedAt: 0, targetCount: targets.length, targets: Object.fromEntries(targets.map(target => [target.id, target])) }; state.settings.updatedAt = Date.now(); write(state); },
+    async stopHunt() { const state = read(); state.settings.hunt = { ...(state.settings.hunt || {}), active: false, stoppedAt: Date.now() }; state.settings.updatedAt = Date.now(); write(state); },
+    async resetHunt() { const state = read(); Object.entries(state.games).filter(([, game]) => game?.source === "team-hunt" || game?.source === "ballon-game" || game?.source === "oracle").forEach(([id]) => delete state.games[id]); delete state.games["ballon-game"]; state.settings.hunt = { active: false, roundId: "", startedAt: 0, stoppedAt: 0, targetCount: 10, targets: {} }; state.settings.updatedAt = Date.now(); write(state); },
+    async claimHuntObject(roundId, target, profile) {
       const state = read();
       const hunt = state.settings.hunt || {};
-      if (!hunt.active || hunt.roundId !== roundId || hunt.endsAt <= Date.now()) throw new Error("hunt-closed");
+      if (!hunt.active || hunt.roundId !== roundId || !hunt.targets?.[target.id]) throw new Error("hunt-closed");
       const id = `hunt-${roundId}-${profile.teamId}-${target.id}`;
-      if (state.games[id]) return { awarded: false, teamId: state.games[id].teamId };
-      state.games[id] = huntGame(roundId, target, profile, points, profile.id);
+      if (state.games[id]) return { awarded: false, find: state.games[id] };
+      state.games[id] = huntGame(roundId, target, profile, profile.id);
       state.settings.updatedAt = Date.now();
       write(state);
-      return { awarded: true, teamId: profile.teamId };
+      return { awarded: true, find: state.games[id] };
     },
+    async addHuntFind(roundId, targetId, teamId, playerName) { const state = read(); const hunt = state.settings.hunt || {}, target = hunt.targets?.[targetId]; if (!hunt.roundId || hunt.roundId !== roundId || !target || !TEAMS.some(team => team.id === teamId)) throw new Error("Ungültiger Nachtjagd-Fund."); const id = `hunt-${roundId}-${teamId}-${targetId}`; if (state.games[id]) return { awarded: false, find: state.games[id] }; state.games[id] = huntGame(roundId, target, { id: "admin", name: String(playerName || "Spielleitung").trim().slice(0, 32) || "Spielleitung", teamId }, "admin", true); state.settings.updatedAt = Date.now(); write(state); return { awarded: true, find: state.games[id] }; },
+    async removeHuntFind(roundId, targetId, teamId) { const state = read(); delete state.games[`hunt-${roundId}-${teamId}-${targetId}`]; state.settings.updatedAt = Date.now(); write(state); },
     async startOracle({ question, answer, unit, minutes, maxPoints = 5 }) { const state = read(); const startedAt = Date.now(); state.settings.oracle = { active: true, revealed: false, roundId: startedAt.toString(36), question, answer, unit, maxPoints, startedAt, endsAt: startedAt + minutes * 60000, results: {} }; write(state); },
     async submitOracleAnswer(roundId, profile, value) { const state = read(); const oracle = state.settings.oracle || {}; if (!oracle.active || oracle.roundId !== roundId || oracle.endsAt <= Date.now()) throw new Error("oracle-closed"); const round = state.oracleAnswers[roundId] ||= {}; if (round[profile.teamId]) return { accepted: false, answer: round[profile.teamId].value }; round[profile.teamId] = { value, playerName: profile.name, claimantId: profile.id, createdAt: Date.now() }; write(state); return { accepted: true, answer: value }; },
     async finishOracle(state) { const latest = read(); const result = buildOracleResult(state || latest); latest.games[`oracle-${result.roundId}`] = result.game; latest.settings.oracle = { ...latest.settings.oracle, active: false, revealed: true, results: result.results }; latest.settings.updatedAt = Date.now(); write(latest); },
@@ -429,34 +449,22 @@ function localStore() {
   };
 }
 
-function challengeGame(challengeId, profile, points, claimantId) {
+function huntGame(roundId, target, profile, claimantId, manual = false) {
+  const points = Object.fromEntries(TEAMS.map(team => [team.id, team.id === profile.teamId ? HUNT_POINTS_PER_OBJECT : 0]));
   return {
-    name: `Nachtjagd: ${challengeId === "bottle" ? "Flasche" : challengeId}`,
-    round: "Zusatzauftrag",
-    resultText: `${profile.name} · ${profile.teamId}`,
-    points,
-    source: "challenge",
-    challengeId,
-    claimantId,
-    playerName: profile.name,
-    teamId: profile.teamId,
-    createdAt: Date.now(),
-    updatedAt: Date.now()
-  };
-}
-
-function huntGame(roundId, target, profile, points, claimantId) {
-  return {
-    name: `Nachtjagd: ${target.name}`,
+    name: `Nachtjagd · Gegenstand ${target.number}`,
     round: "Die zehn Zeichen",
-    resultText: `${profile.name} fand ${target.name} für ${profile.teamId}`,
+    resultText: `Gegenstand ${target.number} gefunden von ${profile.name}`,
     points,
     source: "team-hunt",
     roundId,
     targetId: target.id,
+    targetNumber: Number(target.number),
     claimantId,
     playerName: profile.name,
     teamId: profile.teamId,
+    manual: !!manual,
+    awardedPoints: HUNT_POINTS_PER_OBJECT,
     createdAt: Date.now(),
     updatedAt: Date.now()
   };
@@ -477,9 +485,24 @@ function normalise(value) {
     novitiusParticipants: value?.novitiusParticipants || {},
     novitiusAnswers: value?.novitiusAnswers || {},
     novitiusAdmin: normaliseNovitiusAdmin(value?.novitiusAdmin),
+    huntAdmin: { targets: normaliseHuntTargets(value?.huntAdmin?.targets) },
     oracleAnswers: value?.oracleAnswers || {},
     oracleQuestions: value?.oracleQuestions || {}
   };
+}
+
+function cleanHuntTarget(targetId, target) {
+  const base = HUNT_DEFAULT_TARGETS[targetId];
+  if (!base) throw new Error("Unbekannter Gegenstand.");
+  const clue = String(target?.clue || "").trim().slice(0, 220);
+  const category = String(target?.category || "").trim().slice(0, 60);
+  const internalName = String(target?.internalName || "").trim().slice(0, 80);
+  if (!clue || !category || !internalName) throw new Error("Hinweis, Erkennungsziel und interner Name sind erforderlich.");
+  return { id: targetId, number: base.number, clue, category, internalName, enabled: target?.enabled !== false };
+}
+
+function publicHuntTarget(target) {
+  return { id: target.id, number: Number(target.number), clue: target.clue, category: target.category };
 }
 
 function normaliseSongBattleAdmin(value = null) {

@@ -50,28 +50,13 @@ Der Workflow in `.github/workflows/pages.yml` veröffentlicht `main` automatisch
 - `novitiusParticipants/{uid}`: individuelle Anmeldung mit Name und Reich
 - `novitiusAnswers/{uid}/question-{nr}`: eigene, bis zur Sperre änderbare Antworten
 - `novitiusAdmin/questions`: geschützter Fragenkatalog mit Lösungen und Toleranzbereichen
+- `settings/hunt`: öffentlicher Nachtjagd-Status und die für die laufende Runde eingefrorenen Hinweise
+- `huntAdmin/targets`: geschützte Bearbeitung der internen Namen, KI-Erkennungsziele und Hinweise
+- `games/hunt-{runde}-{reich}-{gegenstand}`: atomarer, eindeutig adressierter Fund mit genau einem Tagespunkt
 - `settings/mode`: `live`, `frozen` oder `final`
 - `admins/{uid}`: Freigabe für Schreibzugriff
 
 Die Gesamtpunkte werden aus allen Spielresultaten berechnet. Korrekturen wirken dadurch sofort und ohne separate Summenpflege.
-
-## Ballon Game
-
-Im Adminbereich im Abschnitt **Ballon Game** auf **Spiel starten** klicken.
-Anschliessend **Resultat eintragen** wählen, alle fünf Reiche genau einmal auf
-Platz 1–5 einordnen und speichern. Das Spiel wird damit beendet. Die Punkte
-5 / 4 / 3 / 2 / 1 werden automatisch vergeben. **Bearbeiten** in der Resultatliste
-führt zurück zu diesem Abschnitt. Erneutes Speichern ersetzt das Resultat;
-es addiert keinen zweiten Eintrag. **Zurücksetzen** entfernt Rangfolge und Spielpunkte.
-
-Das Spiel nutzt den bestehenden Pfad `games/ballon-game` mit `status`, `ranking`
-(Team-IDs von Platz 1 bis 5), `points`, `source: "placement"`, `round`,
-`description`, `durationMinutes` und Zeitstempeln. Vor dem ersten Speichern
-zeigt die öffentliche Seite automatisch **Noch nicht gestartet**. Die ca.
-15 Minuten sind eine Dauerangabe; der Status wird durch die Spielleitung gesteuert.
-Nur beendete Spiele mit Status werden gewertet. Bestehende Resultate ohne
-Status zählen unverändert. Die bisherigen Admin-Regeln für `games` und
-`settings` reichen aus; neue Firebase-Pfade oder Regeln sind nicht nötig.
 
 ## Song Battle
 
@@ -114,3 +99,39 @@ angemeldeten Personen eines Reichs verwendet. Dadurch entsteht kein Vorteil
 durch eine grössere Teilnehmerzahl. Gleichstände teilen sich den Platz und die
 zugehörigen Gesamtpunkte. Das erneute Abschliessen nach einer Korrektur ersetzt
 das feste Spielresultat, anstatt weitere Punkte zu addieren.
+
+## Nachtjagd
+
+Die Nachtjagd ist kein Hauptspiel, sondern eine zusätzliche ganztägige Mission.
+Der Admin startet sie morgens und beendet sie manuell. Auf der Ranglistenseite
+erscheint eine kompakte Karte mit dem eigenen Teamfortschritt; `nachtjagd.html`
+enthält die eigenständige Mission mit zehn Hinweiskarten und Kameraerkennung.
+Gefundene Karten zeigen dauerhaft nur **Gegenstand gefunden**, nicht die Lösung.
+
+Jeder Fund wird als deterministischer Eintrag unter
+`games/hunt-{runde}-{reich}-{gegenstand}` gespeichert. Eine Firebase-Transaktion
+erstellt diesen Eintrag nur, wenn er noch nicht existiert. Zwei fast gleichzeitige
+Scans desselben Reichs können deshalb zusammen höchstens einen Eintrag und einen
+Tagespunkt erzeugen. Ein anderes Reich kann denselben Gegenstand unabhängig
+finden. Nachtjagd-Einträge fliessen direkt in `totalsFromGames` ein, erscheinen
+aber nicht als einzelne Hauptspiele in der normalen Chronik.
+
+Im Adminbereich lassen sich Hinweise, interne Namen und KI-Kategorien bearbeiten,
+alle Teamfortschritte und Finder kontrollieren sowie Funde manuell hinzufügen
+oder entfernen. Beim Entfernen verschwindet derselbe eindeutige Spieleintrag,
+wodurch auch der Tagespunkt sofort zurückgenommen wird. **Zurücksetzen** entfernt
+alle Nachtjagd-Funde sowie alte Ballon- und Orakel-Spielresultate; die bearbeitete
+Gegenstandskonfiguration bleibt erhalten.
+
+Die zehn Plätze sind im ausgelieferten Code bewusst noch deaktiviert und enthalten
+keine Lösungen. Vor dem ersten Start werden Hinweis, interner Name und passende
+KI-Kategorie ausschliesslich im geschützten Adminbereich erfasst und aktiviert.
+
+`display.html` ist die eigenständige Querformat-Ansicht für den grossen Bildschirm.
+Sie zeigt die Tagesrangliste, alle fünf Nachtjagd-Fortschritte und den letzten Fund,
+aber weder Hinweise noch Lösungen.
+
+Die frühere Orakel-Logik bleibt intern im Code erhalten, hat aber keine eigene
+Teilnehmer- oder Adminoberfläche mehr. Sie kann später für das 5-Stationen-Spiel
+wiederverwendet werden. Das Ballon Game wird vollständig ignoriert und nicht mehr
+in Rangliste oder Chronik eingerechnet.

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07080d"><title>Regnum Noctis · Display</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=hunt-2">
+</head>
+<body class="display-page">
+  <div class="stars" aria-hidden="true"></div>
+  <main class="display-shell">
+    <header class="display-header"><div><p class="eyebrow">Rosswöschwyber · Probeweekend</p><h1>Regnum <span>Noctis</span></h1></div><div class="live-pill"><i></i><span id="displayConnection">Live verbunden</span></div></header>
+    <div class="display-grid">
+      <section class="display-ranking"><div class="display-section-title"><p class="eyebrow">Machtverhältnisse</p><h2>🏆 Tagesrangliste</h2></div><ol id="displayLeaderboard"></ol></section>
+      <aside class="display-hunt"><div class="display-section-title"><p class="eyebrow">Ganztägige Challenge</p><h2>🌙 Nachtjagd</h2><span id="displayHuntStatus">Noch nicht gestartet</span></div><div id="displayHuntProgress"></div><div id="displayLastFind" class="display-last-find hidden"></div></aside>
+    </div>
+    <footer><span>Regnum Noctis 2026</span><time id="displayUpdated"></time></footer>
+  </main>
+  <script type="module" src="display.js?v=hunt-2"></script>
+</body>
+</html>

@@ -1,5 +1,5 @@
-import { TEAMS, totalsFromGames, sortedGames, formatTime, BALLON_GAME, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult } from "./data.js?v=games-3";
-import { getStore } from "./store.js?v=games-3";
+import { TEAMS, totalsFromGames, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, hasGameResult } from "./data.js?v=hunt-2";
+import { getStore } from "./store.js?v=hunt-2";
 import { TEAM_STORIES, getPlayerProfile, savePlayerProfile } from "./player.js";
 
 const $ = selector => document.querySelector(selector);
@@ -14,7 +14,6 @@ setupOnboarding();
 window.addEventListener("regnum-player-changed", () => {
   ensureSongTeamSubscription();
   if (currentState?.settings?.mode === "live") {
-    maybeCelebrateGameWinner(currentState.games?.[BALLON_GAME.id], BALLON_GAME.id);
     maybeCelebrateGameWinner(currentState.games?.[SONG_BATTLE.id], SONG_BATTLE.id);
     maybeCelebrateGameWinner(currentState.games?.[NOVITIUS_GAME.id], NOVITIUS_GAME.id);
   }
@@ -119,7 +118,6 @@ function render(state) {
   if (mode === "final") renderWinner(leader, totals[leader.id]);
   if (mode !== "live") return;
 
-  renderBallonGame(state.games[BALLON_GAME.id]);
   renderSongBattle(state.games[SONG_BATTLE.id]);
   const novitiusGame = state.games[NOVITIUS_GAME.id];
   if (novitiusGame?.status === "completed") maybeCelebrateGameWinner(novitiusGame, NOVITIUS_GAME.id);
@@ -148,16 +146,6 @@ function render(state) {
 
   if (hasResults && previousLeader && previousLeader !== leader.id) burstConfetti(leader.color);
   if (hasResults) { previousLeader = leader.id; sessionStorage.setItem("regnum-leader", leader.id); }
-}
-
-function renderBallonGame(game) {
-  const status = game?.status || "not-started";
-  const running = status === "running";
-  $("#ballonGameCard").classList.toggle("hidden", !running);
-  $("#ballonGameStatus").textContent = GAME_STATUSES[status] || GAME_STATUSES["not-started"];
-  $("#ballonGameCard").dataset.status = status;
-  $("#ballonGameDescription").textContent = BALLON_GAME.description;
-  if (status === "completed") maybeCelebrateGameWinner(game, BALLON_GAME.id);
 }
 
 function renderSongBattle(game) {

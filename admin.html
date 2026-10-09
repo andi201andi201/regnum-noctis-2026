@@ -5,7 +5,7 @@
   <meta name="theme-color" content="#08090d"><title>Admin · Regnum Noctis</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=games-3">
+  <link rel="stylesheet" href="styles.css?v=hunt-2">
 </head>
 <body class="admin-page">
   <div class="stars" aria-hidden="true"></div>
@@ -18,19 +18,6 @@
 
     <div id="adminContent" class="hidden">
       <section class="panel status-panel"><div><p class="eyebrow">Sichtbarkeit</p><h2>Modus steuern</h2></div><div class="segmented" role="group" aria-label="Anzeigemodus"><button data-mode="live">Live</button><button data-mode="frozen">Einfrieren</button><button data-mode="final">Finale</button></div><p class="mode-help" id="modeHelp"></p></section>
-
-      <section id="ballonAdminPanel" class="panel ballon-admin-panel">
-        <div class="panel-title"><div><p class="eyebrow">Vormittag · ca. 15 Minuten</p><h2>Ballon Game</h2></div><span id="ballonAdminStatus" class="save-message">Noch nicht gestartet</span></div>
-        <p class="save-message">Ballon ohne Hände durchs ganze Team transportieren. Bei Fallenlassen oder Platzen zurück an den Start.</p>
-        <div class="hunt-admin-actions"><button id="startBallon" class="primary-button" type="button">Spiel starten</button><button id="enterBallonResult" class="secondary-button" type="button">Resultat eintragen</button><button id="resetBallon" class="text-button hidden" type="button">Zurücksetzen</button></div>
-        <form id="ballonForm" class="hidden">
-          <input id="ballonStatus" type="hidden" value="completed">
-          <fieldset id="ballonPlacements" disabled><legend>Rangfolge · jedes Reich genau einmal</legend><div id="ballonRankInputs" class="ballon-rank-inputs"></div></fieldset>
-          <p class="save-message">Speichern beendet das Spiel und vergibt die Punkte automatisch. Korrekturen ersetzen das bisherige Resultat.</p>
-          <div class="hunt-admin-actions"><button id="saveBallon" class="primary-button" type="submit">Resultat speichern · Punkte vergeben</button><button id="cancelBallonEdit" class="secondary-button" type="button">Abbrechen</button></div>
-          <p id="ballonSaveMessage" class="form-error" role="status"></p>
-        </form>
-      </section>
 
       <section id="songBattleAdminPanel" class="panel song-admin-panel">
         <div class="panel-title"><div><p class="eyebrow">Vormittag · ca. 15 Minuten</p><h2>🎵 Song Battle</h2></div><span id="songBattleAdminStatus" class="save-message">Noch nicht gestartet</span></div>
@@ -96,25 +83,29 @@
         </div>
       </section>
 
-      <section class="panel hunt-control-panel">
-        <div><p class="eyebrow">Gemeinsames Kurzspiel</p><h2>Nachtjagd steuern</h2><p id="huntAdminStatus" class="save-message"></p></div>
-        <div class="hunt-admin-actions"><button id="startTeamHunt" class="primary-button" type="button">12-Minuten-Jagd starten</button><button id="stopTeamHunt" class="secondary-button hidden" type="button">Jagd beenden</button></div>
-      </section>
+      <section id="huntAdminPanel" class="panel hunt-control-panel">
+        <div class="panel-title"><div><p class="eyebrow">Ganztägige Challenge</p><h2>🌙 Nachtjagd</h2></div><span id="huntAdminStatus" class="save-message">Noch nicht gestartet</span></div>
+        <p class="save-message">Jeder Gegenstand bringt jedem Reich einmalig +1 Tagespunkt. Die Jagd läuft bis zum manuellen Stopp.</p>
+        <div class="hunt-admin-actions"><button id="startTeamHunt" class="primary-button" type="button">Nachtjagd starten</button><button id="stopTeamHunt" class="secondary-button hidden" type="button">Nachtjagd stoppen</button><button id="resetTeamHunt" class="text-button hidden" type="button">Nachtjagd zurücksetzen</button><a class="secondary-button" href="display.html" target="_blank">TV-Ansicht öffnen</a></div>
+        <div id="huntTeamOverview" class="hunt-team-overview"></div>
 
-      <section class="panel oracle-admin-panel">
-        <div class="panel-title"><div><p class="eyebrow">Vorbereiteter Fragenkatalog</p><h2>Das Orakel</h2></div><span id="oracleQuestionCount" class="save-message">0 Fragen</span></div>
-        <div id="oracleQuestionList" class="oracle-question-list"></div>
-        <p id="oracleQuestionsEmpty" class="empty-state">Noch keine Schätzfragen vorbereitet.</p>
-        <form id="oracleAdminForm" class="oracle-editor">
-          <input id="oracleQuestionId" type="hidden">
-          <p class="eyebrow">Frage vorbereiten</p>
-          <label>Schätzfrage<input id="oracleAdminQuestion" type="text" maxlength="140" required placeholder="z. B. Wie viele Schrauben sind im Glas?"></label>
-          <div class="form-grid"><label>Korrekte Zahl<input id="oracleAdminAnswer" type="number" inputmode="decimal" step="any" required placeholder="347"></label><label>Einheit<input id="oracleAdminUnit" type="text" maxlength="20" placeholder="z. B. Stück, g oder cm"></label></div>
-          <div class="form-grid"><label>Dauer in Minuten<input id="oracleAdminMinutes" type="number" inputmode="numeric" min="1" max="15" value="3" required></label><label>Maximalpunkte<input id="oracleAdminPoints" type="number" inputmode="numeric" min="3" max="20" value="5" required></label></div>
-          <div class="hunt-admin-actions"><button id="saveOracleQuestion" class="primary-button" type="submit">Frage speichern</button><button id="cancelOracleEdit" class="secondary-button hidden" type="button">Abbrechen</button></div>
-        </form>
-        <div id="oracleAdminRunning" class="hidden"><p id="oracleAdminStatus" class="save-message"></p><div class="hunt-admin-actions"><button id="finishOracle" class="primary-button" type="button">Beenden und auswerten</button></div></div>
-        <div id="oracleAdminRevealed" class="hidden"><p class="save-message">Die Lösung und Punkte sind öffentlich sichtbar.</p><button id="hideOracle" class="secondary-button" type="button">Orakel ausblenden</button></div>
+        <div class="hunt-admin-section">
+          <div class="panel-title"><div><p class="eyebrow">Konfiguration</p><h3>Gegenstände und Hinweise</h3></div></div>
+          <p class="save-message">Änderungen gelten beim nächsten Start. Interner Name und Erkennungsziel sind nur für die Spielleitung und die Erkennung bestimmt.</p>
+          <div id="huntTargetEditorList" class="hunt-target-editor-list"></div>
+        </div>
+
+        <div id="huntManualFind" class="hunt-admin-section hidden">
+          <div class="panel-title"><div><p class="eyebrow">Korrektur</p><h3>Fund manuell hinzufügen</h3></div></div>
+          <form id="huntManualFindForm" class="form-grid hunt-manual-form"><label>Gegenstand<select id="huntManualTarget"></select></label><label>Reich<select id="huntManualTeam"></select></label><label>Name des Finders<input id="huntManualPlayer" maxlength="32" placeholder="z. B. Andy" required></label><button class="primary-button" type="submit">Fund hinzufügen · +1</button></form>
+        </div>
+
+        <div id="huntDetailSection" class="hunt-admin-section hidden">
+          <div class="panel-title"><div><p class="eyebrow">Fund-Verlauf</p><h3>Alle Gegenstände und Reiche</h3></div></div>
+          <div id="huntFindMatrix" class="hunt-find-matrix"></div>
+          <div class="panel-title hunt-history-title"><div><p class="eyebrow">Chronologisch</p><h3>Zentraler Verlauf</h3></div></div>
+          <div id="huntAdminHistory" class="hunt-admin-history"></div>
+        </div>
       </section>
 
       <section class="panel">
@@ -131,6 +122,6 @@
     </div>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="admin.js?v=games-3"></script>
+  <script type="module" src="admin.js?v=hunt-2"></script>
 </body>
 </html>

@@ -1,39 +1,14 @@
-import { TEAMS, sortedGames, formatTime, BALLON_GAME, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, buildBallonGame, hasGameResult, songBattleScores, suggestedSongBattleRanking } from "./data.js?v=games-3";
-import { getStore } from "./store.js?v=games-3";
-import { HUNT_DURATION_MINUTES } from "./hunt-data.js";
+import { TEAMS, sortedGames, formatTime, SONG_BATTLE, NOVITIUS_GAME, GAME_STATUSES, hasGameResult, songBattleScores, suggestedSongBattleRanking } from "./data.js?v=hunt-2";
+import { getStore } from "./store.js?v=hunt-2";
+import { HUNT_DEFAULT_TARGETS, normaliseHuntTargets, huntTargetList, huntFinds, huntProgress } from "./hunt-data.js?v=hunt-2";
 
 const $ = selector => document.querySelector(selector);
 const store = await getStore();
-let currentState = null, editingId = null, oracleQuestions = {}, oracleQuestionsUnsubscribe = null;
+let currentState = null, editingId = null;
 let songAnswers = {}, songParticipants = {}, songAdmin = { evaluations: {}, internalPoints: {} }, songAnswersUnsubscribe = null, songParticipantsUnsubscribe = null, songAdminUnsubscribe = null;
 let songReviewNumber = 1;
 let novitiusAdmin = { questions: {} }, novitiusParticipants = {}, novitiusAnswers = {}, novitiusAdminUnsubscribe = null, novitiusParticipantsUnsubscribe = null, novitiusAnswersUnsubscribe = null, novitiusReviewNumber = 1;
-let ballonDirty = false, ballonSignature = null;
-
-$("#ballonRankInputs").innerHTML = TEAMS.map((_, index) => `<label><span>Platz ${index + 1} <small>+${5 - index} Punkte</small></span><select id="ballon-rank-${index}" required><option value="">Reich wählen …</option>${TEAMS.map(team => `<option value="${team.id}">${team.name} ${team.marker}</option>`).join("")}</select></label>`).join("");
-$("#ballonForm").addEventListener("change", () => { ballonDirty = true; updateBallonForm(); });
-$("#startBallon").addEventListener("click", () => saveBallonStatus("running"));
-$("#resetBallon").addEventListener("click", () => {
-  if (currentState.games[BALLON_GAME.id]?.status === "completed" && !confirm("Ballon Game zurücksetzen? Die Rangfolge und Punkte dieses Spiels werden entfernt.")) return;
-  saveBallonStatus("not-started");
-});
-$("#enterBallonResult").addEventListener("click", () => openBallonResult());
-$("#cancelBallonEdit").addEventListener("click", () => { ballonDirty = false; renderBallonAdmin(currentState, true); });
-$("#ballonForm").addEventListener("submit", async event => {
-  event.preventDefault();
-  const button = $("#saveBallon");
-  button.disabled = true;
-  $("#ballonSaveMessage").textContent = "";
-  try {
-    const ranking = TEAMS.map((_, index) => $(`#ballon-rank-${index}`).value);
-    const game = buildBallonGame($("#ballonStatus").value, ranking, currentState.games[BALLON_GAME.id]);
-    await store.saveGame(game, BALLON_GAME.id);
-    ballonDirty = false;
-    renderBallonAdmin({ games: { ...currentState.games, [BALLON_GAME.id]: game } }, true);
-    toast(game.status === "completed" ? "Ballon Game ausgewertet · Punkte aktualisiert" : "Spielstatus gespeichert");
-  } catch (error) { $("#ballonSaveMessage").textContent = error.message; }
-  finally { button.disabled = false; }
-});
+let huntAdmin = { targets: normaliseHuntTargets() }, huntAdminUnsubscribe = null, huntTargetSignature = "";
 
 $("#songRoundSelect").innerHTML = Array.from({ length: SONG_BATTLE.songCount }, (_, index) => `<option value="${index + 1}">Song ${index + 1} von ${SONG_BATTLE.songCount}</option>`).join("");
 $("#startSongBattle").addEventListener("click", async () => {
@@ -165,39 +140,36 @@ $("#logoutBtn").addEventListener("click", async () => {
 
 document.querySelectorAll("[data-mode]").forEach(button => button.addEventListener("click", async () => { await store.setMode(button.dataset.mode); toast(`Modus auf „${button.textContent}“ gesetzt`); }));
 $("#startTeamHunt").addEventListener("click", async () => {
-  if (!confirm("Nachtjagd jetzt für alle Reiche starten? Die Zeit läuft sofort.")) return;
-  await store.startHunt(HUNT_DURATION_MINUTES);
-  toast("Nachtjagd gestartet");
+  if (!confirm("Nachtjagd jetzt für alle Reiche starten? Sie bleibt aktiv, bis ihr sie manuell stoppt.")) return;
+  try { await store.startHunt(); toast("Nachtjagd gestartet"); } catch (error) { toast(error.message); }
 });
 $("#stopTeamHunt").addEventListener("click", async () => {
-  if (!confirm("Nachtjagd wirklich vorzeitig beenden?")) return;
+  if (!confirm("Nachtjagd jetzt beenden? Alle bisherigen Funde und Punkte bleiben erhalten.")) return;
   await store.stopHunt();
   toast("Nachtjagd beendet");
 });
-$("#oracleAdminForm").addEventListener("submit", async event => {
-  event.preventDefault();
-  const id = $("#oracleQuestionId").value || null;
-  await store.saveOracleQuestion({ question: $("#oracleAdminQuestion").value.trim(), answer: Number($("#oracleAdminAnswer").value), unit: $("#oracleAdminUnit").value.trim(), minutes: Number($("#oracleAdminMinutes").value), maxPoints: Number($("#oracleAdminPoints").value) }, id);
-  resetOracleEditor();
-  toast(id ? "Frage aktualisiert" : "Frage vorbereitet");
+$("#resetTeamHunt").addEventListener("click", async () => {
+  if (!confirm("Nachtjagd vollständig zurücksetzen? Alle Nachtjagd-Funde und die dazugehörigen Tagespunkte werden entfernt.")) return;
+  await store.resetHunt(); toast("Nachtjagd zurückgesetzt");
 });
-$("#cancelOracleEdit").addEventListener("click", resetOracleEditor);
-$("#oracleQuestionList").addEventListener("click", async event => {
-  const button = event.target.closest("button[data-oracle-action]"); if (!button) return;
-  const question = oracleQuestions[button.dataset.id]; if (!question) return;
-  if (button.dataset.oracleAction === "start") {
-    if (!confirm(`Orakel „${question.question}“ jetzt starten? Die Zeit läuft sofort.`)) return;
-    await store.startOracle(question); toast("Orakel gestartet");
-  }
-  if (button.dataset.oracleAction === "edit") loadOracleEditor(button.dataset.id, question);
-  if (button.dataset.oracleAction === "delete" && confirm("Diese vorbereitete Frage wirklich löschen?")) { await store.deleteOracleQuestion(button.dataset.id); toast("Frage gelöscht"); }
+$("#huntTargetEditorList").addEventListener("submit", async event => {
+  const form = event.target.closest("form[data-hunt-target]"); if (!form) return; event.preventDefault();
+  const id = form.dataset.huntTarget;
+  try { await store.saveHuntTarget(id, { clue: form.querySelector("[name=clue]").value, internalName: form.querySelector("[name=internalName]").value, category: form.querySelector("[name=category]").value, enabled: form.querySelector("[name=enabled]").checked }); toast(`Gegenstand ${HUNT_DEFAULT_TARGETS[id].number} gespeichert`); }
+  catch (error) { toast(error.message); }
 });
-$("#finishOracle").addEventListener("click", async () => {
-  if (!confirm("Orakel beenden und Punkte nach Nähe verteilen?")) return;
-  await store.finishOracle(currentState);
-  toast("Orakel ausgewertet");
+$("#huntManualFindForm").addEventListener("submit", async event => {
+  event.preventDefault(); const hunt = currentState.settings.hunt;
+  const result = await store.addHuntFind(hunt.roundId, $("#huntManualTarget").value, $("#huntManualTeam").value, $("#huntManualPlayer").value);
+  toast(result.awarded ? "Fund hinzugefügt · +1 Tagespunkt" : "Dieses Reich hat den Gegenstand bereits gefunden");
+  if (result.awarded) $("#huntManualPlayer").value = "";
 });
-$("#hideOracle").addEventListener("click", async () => { await store.hideOracle(); toast("Orakel ausgeblendet"); });
+$("#huntFindMatrix").addEventListener("click", async event => {
+  const button = event.target.closest("button[data-remove-hunt]"); if (!button) return;
+  const [teamId, targetId] = button.dataset.removeHunt.split("|");
+  if (!confirm("Diesen Fund entfernen? Der entsprechende Tagespunkt wird sofort zurückgenommen.")) return;
+  await store.removeHuntFind(currentState.settings.hunt.roundId, targetId, teamId); toast("Fund und Tagespunkt entfernt");
+});
 
 $("#resultForm").addEventListener("submit", async event => {
   event.preventDefault();
@@ -223,55 +195,15 @@ $("#adminResults").addEventListener("click", async event => {
 });
 
 function renderAdmin(state) {
-  renderBallonAdmin(state);
   renderSongBattleAdmin(state);
   renderNovitiusAdmin(state);
+  renderHuntAdmin(state);
   const mode = state.settings.mode || "live";
   document.querySelectorAll("[data-mode]").forEach(button => button.classList.toggle("active", button.dataset.mode === mode));
   $("#modeHelp").textContent = { live: "Rangliste und Resultate sind für alle sichtbar.", frozen: "Publikum sieht keine Punkte – Admin bleibt bedienbar.", final: "Die Siegeransicht wird öffentlich angezeigt." }[mode];
-  const hunt = state.settings.hunt || {};
-  const huntRunning = hunt.active && hunt.endsAt > Date.now();
-  $("#startTeamHunt").classList.toggle("hidden", huntRunning);
-  $("#stopTeamHunt").classList.toggle("hidden", !huntRunning);
-  $("#huntAdminStatus").textContent = huntRunning ? `Aktiv bis ${formatTime(hunt.endsAt)} · Runde ${hunt.roundId}` : "Nicht aktiv. Beim Start beginnt der Countdown sofort.";
-  const oracle = state.settings.oracle || {};
-  const oracleBusy = oracle.active || oracle.revealed;
-  $("#oracleAdminForm").classList.toggle("hidden", oracleBusy);
-  $("#oracleQuestionList").classList.toggle("hidden", oracleBusy);
-  $("#oracleQuestionsEmpty").classList.toggle("hidden", oracleBusy || Object.keys(oracleQuestions).length > 0);
-  $("#oracleAdminRunning").classList.toggle("hidden", !oracle.active);
-  $("#oracleAdminRevealed").classList.toggle("hidden", !oracle.revealed);
-  if (oracle.active) {
-    const answerCount = Object.keys(state.oracleAnswers?.[oracle.roundId] || {}).length;
-    $("#oracleAdminStatus").textContent = `${answerCount} von 5 Reichen haben geantwortet · Ende ${formatTime(oracle.endsAt)}`;
-  }
   const games = sortedGames(state.games).filter(hasGameResult);
   $("#adminResults").innerHTML = games.map(game => `<article class="admin-result"><div><span>${formatTime(game.createdAt, true)}</span><strong>${escapeHtml(game.name)}</strong><small>${escapeHtml(game.round || game.resultText || "")}</small></div><div class="admin-actions"><button data-action="edit" data-id="${game.id}">Bearbeiten</button><button class="danger" data-action="delete" data-id="${game.id}">Löschen</button></div></article>`).join("");
   $("#adminEmpty").classList.toggle("hidden", games.length > 0);
-}
-
-function renderBallonAdmin(state, force = false) {
-  const game = state?.games?.[BALLON_GAME.id];
-  const status = game?.status || "not-started";
-  const signature = JSON.stringify(game || null);
-  $("#ballonAdminStatus").textContent = GAME_STATUSES[status];
-  $("#startBallon").classList.toggle("hidden", status !== "not-started");
-  $("#resetBallon").classList.toggle("hidden", status === "not-started");
-  $("#enterBallonResult").textContent = status === "completed" ? "Resultat korrigieren" : "Resultat eintragen";
-  if (!force && (ballonDirty || signature === ballonSignature)) return;
-  ballonSignature = signature;
-  $("#ballonStatus").value = "completed";
-  $("#ballonForm").classList.add("hidden");
-  TEAMS.forEach((_, index) => { $(`#ballon-rank-${index}`).value = game?.ranking?.[index] || ""; });
-  $("#ballonSaveMessage").textContent = "";
-  updateBallonForm();
-}
-
-function openBallonResult() {
-  $("#ballonForm").classList.remove("hidden");
-  ballonDirty = true;
-  updateBallonForm();
-  $("#ballon-rank-0").focus();
 }
 
 async function activateSongRound(songNumber) {
@@ -446,60 +378,52 @@ function formatNovitiusValue(value, unit = "") {
   return `${value}${unit ? ` ${unit}` : ""}`;
 }
 
-async function saveBallonStatus(status) {
-  const controls = [$("#startBallon"), $("#resetBallon"), $("#enterBallonResult")];
-  controls.forEach(button => { button.disabled = true; });
-  try {
-    const game = buildBallonGame(status, [], currentState.games[BALLON_GAME.id]);
-    await store.saveGame(game, BALLON_GAME.id);
-    ballonDirty = false;
-    renderBallonAdmin({ games: { ...currentState.games, [BALLON_GAME.id]: game } }, true);
-    toast(status === "running" ? "Ballon Game läuft" : "Ballon Game zurückgesetzt");
-  } catch (error) { toast(`Speichern fehlgeschlagen: ${error.message}`); }
-  finally { controls.forEach(button => { button.disabled = false; }); }
+function renderHuntAdmin(state) {
+  const hunt = state.settings.hunt || {}, hasRound = !!hunt.roundId, active = !!hunt.active;
+  const targets = hasRound ? Object.values(hunt.targets || {}).sort((a, b) => a.number - b.number) : huntTargetList(huntAdmin.targets);
+  const finds = hasRound ? huntFinds(state.games, hunt.roundId) : [];
+  $("#startTeamHunt").classList.toggle("hidden", hasRound);
+  $("#stopTeamHunt").classList.toggle("hidden", !active);
+  $("#resetTeamHunt").classList.toggle("hidden", !hasRound || active);
+  $("#huntAdminStatus").textContent = active ? `Aktiv seit ${formatTime(hunt.startedAt)} · ${finds.length} Funde` : hasRound ? `Beendet · ${finds.length} Funde gespeichert` : "Noch nicht gestartet";
+  $("#huntManualFind").classList.toggle("hidden", !hasRound);
+  $("#huntDetailSection").classList.toggle("hidden", !hasRound);
+  $("#huntTeamOverview").innerHTML = TEAMS.map(team => `<div style="--team:${team.color}"><span>${team.marker} ${team.name}</span><strong>${huntProgress(state.games, hunt.roundId, team.id).size} / ${targets.length || 10}</strong></div>`).join("");
+
+  const signature = JSON.stringify(huntAdmin.targets);
+  if (signature !== huntTargetSignature) {
+    huntTargetSignature = signature;
+    $("#huntTargetEditorList").innerHTML = Object.values(normaliseHuntTargets(huntAdmin.targets)).sort((a, b) => a.number - b.number).map(target => `<form data-hunt-target="${target.id}" class="hunt-target-editor"><div class="hunt-target-editor-head"><strong>Gegenstand ${target.number}</strong><label><input name="enabled" type="checkbox" ${target.enabled !== false ? "checked" : ""}> aktiv</label></div><label>Geheimnisvoller Hinweis<textarea name="clue" maxlength="220" required>${escapeHtml(target.clue)}</textarea></label><div class="form-grid"><label>Interner Name<input name="internalName" maxlength="80" value="${escapeAttribute(target.internalName)}" required></label><label>Erkennungsziel (KI-Kategorie)<input name="category" maxlength="60" value="${escapeAttribute(target.category)}" required></label></div><button class="secondary-button" type="submit">Gegenstand speichern</button></form>`).join("");
+  }
+  if (!hasRound) return;
+  $("#huntManualTarget").innerHTML = targets.map(target => `<option value="${target.id}">Gegenstand ${target.number} · ${escapeHtml(huntAdmin.targets?.[target.id]?.internalName || target.internalName || target.id)}</option>`).join("");
+  $("#huntManualTeam").innerHTML = TEAMS.map(team => `<option value="${team.id}">${team.marker} ${team.name}</option>`).join("");
+  const byKey = new Map(finds.map(find => [`${find.teamId}|${find.targetId}`, find]));
+  $("#huntFindMatrix").innerHTML = targets.map(target => `<article><header><strong>Gegenstand ${target.number}</strong><span>${escapeHtml(huntAdmin.targets?.[target.id]?.internalName || target.internalName || target.id)}</span></header><div>${TEAMS.map(team => { const find = byKey.get(`${team.id}|${target.id}`); return `<section style="--team:${team.color}"><b>${team.marker} ${team.name}</b>${find ? `<span>✓ ${escapeHtml(find.playerName)} · ${formatTime(find.createdAt)}</span><button type="button" data-remove-hunt="${team.id}|${target.id}">Fund entfernen</button>` : "<span>–</span>"}</section>`; }).join("")}</div></article>`).join("");
+  $("#huntAdminHistory").innerHTML = [...finds].sort((a, b) => b.createdAt - a.createdAt).map(find => { const team = TEAMS.find(item => item.id === find.teamId); const target = huntAdmin.targets?.[find.targetId]; return `<div style="--team:${team?.color || "#888"}"><time>${formatTime(find.createdAt)}</time><span><strong>Gegenstand ${find.targetNumber}</strong> · ${escapeHtml(target?.internalName || find.targetId)}<small>von ${escapeHtml(find.playerName)} · ${team?.marker || ""} ${team?.name || find.teamId}${find.manual ? " · manuell" : ""}</small></span><b>+${Number(find.awardedPoints || 1)}</b></div>`; }).join("") || '<p class="empty-state">Noch keine Funde.</p>';
 }
 
-function updateBallonForm() {
-  const completed = $("#ballonStatus").value === "completed";
-  $("#ballonPlacements").disabled = !completed;
-  $("#saveBallon").textContent = completed ? "Resultat speichern · Punkte vergeben" : "Status speichern";
-  const chosen = TEAMS.map((_, index) => $(`#ballon-rank-${index}`).value).filter(Boolean);
-  const duplicate = new Set(chosen).size !== chosen.length;
-  $("#ballonSaveMessage").textContent = completed && duplicate ? "Jedes Reich darf nur einmal vorkommen." : "";
-  TEAMS.forEach((_, index) => $(`#ballon-rank-${index}`).setCustomValidity(completed && duplicate ? "Jedes Reich darf nur einmal vorkommen." : ""));
-}
-
-function renderOracleQuestions() {
-  const entries = Object.entries(oracleQuestions).sort(([, a], [, b]) => (a.updatedAt || 0) - (b.updatedAt || 0));
-  $("#oracleQuestionCount").textContent = `${entries.length} / 10 Fragen`;
-  $("#oracleQuestionList").innerHTML = entries.map(([id, item], index) => `<article class="oracle-question-item"><div class="oracle-question-number">${index + 1}</div><div><strong>${escapeHtml(item.question)}</strong><small>Lösung: ${item.answer}${item.unit ? ` ${escapeHtml(item.unit)}` : ""} · ${item.minutes || 3} Min. · max. ${item.maxPoints || 5} Punkte</small></div><div class="admin-actions"><button data-oracle-action="start" data-id="${id}">Start</button><button data-oracle-action="edit" data-id="${id}">Bearbeiten</button><button class="danger" data-oracle-action="delete" data-id="${id}">Löschen</button></div></article>`).join("");
-  const busy = currentState?.settings?.oracle?.active || currentState?.settings?.oracle?.revealed;
-  $("#oracleQuestionsEmpty").classList.toggle("hidden", busy || entries.length > 0);
-}
-
-function loadOracleEditor(id, question) { $("#oracleQuestionId").value = id; $("#oracleAdminQuestion").value = question.question || ""; $("#oracleAdminAnswer").value = question.answer; $("#oracleAdminUnit").value = question.unit || ""; $("#oracleAdminMinutes").value = question.minutes || 3; $("#oracleAdminPoints").value = question.maxPoints || 5; $("#saveOracleQuestion").textContent = "Änderungen speichern"; $("#cancelOracleEdit").classList.remove("hidden"); $("#oracleAdminForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
-function resetOracleEditor() { $("#oracleAdminForm").reset(); $("#oracleQuestionId").value = ""; $("#oracleAdminMinutes").value = 3; $("#oracleAdminPoints").value = 5; $("#saveOracleQuestion").textContent = "Frage speichern"; $("#cancelOracleEdit").classList.add("hidden"); }
-
-function loadEdit(id) { if (id === BALLON_GAME.id) { ballonDirty = false; renderBallonAdmin(currentState, true); openBallonResult(); $("#ballonAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === SONG_BATTLE.id) { songReviewNumber = 1; renderSongBattleAdmin(currentState); $("#songBattleAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === NOVITIUS_GAME.id) { novitiusReviewNumber = 1; renderNovitiusAdmin(currentState); $("#novitiusAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } const game = currentState.games[id]; if (!game) return; editingId = id; $("#formTitle").textContent = "Resultat korrigieren"; $("#cancelEdit").classList.remove("hidden"); $("#gameName").value = game.name || ""; $("#roundName").value = game.round || ""; $("#resultText").value = game.resultText || ""; TEAMS.forEach(team => $(`#score-${team.id}`).value = Number(game.points?.[team.id] || 0)); $("#resultForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
+function loadEdit(id) { if (id === SONG_BATTLE.id) { songReviewNumber = 1; renderSongBattleAdmin(currentState); $("#songBattleAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } if (id === NOVITIUS_GAME.id) { novitiusReviewNumber = 1; renderNovitiusAdmin(currentState); $("#novitiusAdminPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; } const game = currentState.games[id]; if (!game) return; editingId = id; $("#formTitle").textContent = "Resultat korrigieren"; $("#cancelEdit").classList.remove("hidden"); $("#gameName").value = game.name || ""; $("#roundName").value = game.round || ""; $("#resultText").value = game.resultText || ""; TEAMS.forEach(team => $(`#score-${team.id}`).value = Number(game.points?.[team.id] || 0)); $("#resultForm").scrollIntoView({ behavior: "smooth", block: "start" }); }
 function resetForm() { editingId = null; $("#resultForm").reset(); TEAMS.forEach(team => $(`#score-${team.id}`).value = 0); $("#formTitle").textContent = "Spielresultat erfassen"; $("#cancelEdit").classList.add("hidden"); $("#saveMessage").textContent = ""; }
 function toast(message) { $("#toast").textContent = message; $("#toast").classList.add("show"); setTimeout(() => $("#toast").classList.remove("show"), 2200); }
 async function withDisabled(button, action) { button.disabled = true; try { await action(); } catch (error) { toast(`Speichern fehlgeschlagen: ${error.message}`); } finally { button.disabled = false; } }
 function setAccess(granted) {
   $("#loginPanel").classList.toggle("hidden", granted); $("#adminContent").classList.toggle("hidden", !granted); $("#logoutBtn").classList.toggle("hidden", !granted);
-  if (granted && !oracleQuestionsUnsubscribe) oracleQuestionsUnsubscribe = store.subscribeOracleQuestions(questions => { oracleQuestions = questions; renderOracleQuestions(); });
   if (granted && !songAnswersUnsubscribe) songAnswersUnsubscribe = store.subscribeSongBattleAnswers(answers => { songAnswers = answers; if (currentState) renderSongBattleAdmin(currentState); });
   if (granted && !songParticipantsUnsubscribe) songParticipantsUnsubscribe = store.subscribeSongBattleParticipants(participants => { songParticipants = participants; if (currentState) renderSongBattleAdmin(currentState); });
   if (granted && !songAdminUnsubscribe) songAdminUnsubscribe = store.subscribeSongBattleAdmin(value => { songAdmin = value; if (currentState) renderSongBattleAdmin(currentState); });
   if (granted && !novitiusAdminUnsubscribe) novitiusAdminUnsubscribe = store.subscribeNovitiusAdmin(value => { novitiusAdmin = value; renderNovitiusQuestionList(); if (currentState) renderNovitiusAdmin(currentState); });
   if (granted && !novitiusParticipantsUnsubscribe) novitiusParticipantsUnsubscribe = store.subscribeNovitiusParticipants(value => { novitiusParticipants = value; if (currentState) renderNovitiusAdmin(currentState); });
   if (granted && !novitiusAnswersUnsubscribe) novitiusAnswersUnsubscribe = store.subscribeNovitiusAnswers(value => { novitiusAnswers = value; if (currentState) renderNovitiusAdmin(currentState); });
-  if (!granted && oracleQuestionsUnsubscribe) { oracleQuestionsUnsubscribe(); oracleQuestionsUnsubscribe = null; oracleQuestions = {}; }
+  if (granted && !huntAdminUnsubscribe) huntAdminUnsubscribe = store.subscribeHuntAdmin(value => { huntAdmin = value; huntTargetSignature = ""; if (currentState) renderHuntAdmin(currentState); });
   if (!granted && songAnswersUnsubscribe) { songAnswersUnsubscribe(); songAnswersUnsubscribe = null; songAnswers = {}; }
   if (!granted && songParticipantsUnsubscribe) { songParticipantsUnsubscribe(); songParticipantsUnsubscribe = null; songParticipants = {}; }
   if (!granted && songAdminUnsubscribe) { songAdminUnsubscribe(); songAdminUnsubscribe = null; songAdmin = { evaluations: {}, internalPoints: {} }; }
   if (!granted && novitiusAdminUnsubscribe) { novitiusAdminUnsubscribe(); novitiusAdminUnsubscribe = null; novitiusAdmin = { questions: {} }; }
   if (!granted && novitiusParticipantsUnsubscribe) { novitiusParticipantsUnsubscribe(); novitiusParticipantsUnsubscribe = null; novitiusParticipants = {}; }
   if (!granted && novitiusAnswersUnsubscribe) { novitiusAnswersUnsubscribe(); novitiusAnswersUnsubscribe = null; novitiusAnswers = {}; }
+  if (!granted && huntAdminUnsubscribe) { huntAdminUnsubscribe(); huntAdminUnsubscribe = null; huntAdmin = { targets: normaliseHuntTargets() }; huntTargetSignature = ""; }
 }
 function humanAuthError(code) { return ({ "auth/invalid-credential": "E-Mail oder Passwort ist falsch.", "auth/too-many-requests": "Zu viele Versuche. Bitte kurz warten.", "auth/network-request-failed": "Keine Verbindung. Bitte Internet prüfen." })[code] || "Login fehlgeschlagen."; }
 function escapeHtml(value = "") { const div = document.createElement("div"); div.textContent = value; return div.innerHTML; }
+function escapeAttribute(value = "") { return escapeHtml(String(value)).replaceAll('"', "&quot;"); }
