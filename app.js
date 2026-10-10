@@ -159,12 +159,12 @@ function render(state) {
   const leader = ranking[0];
   const hasResults = games.length > 0;
 
-  $("#liveContent").classList.toggle("hidden", mode !== "live");
+  $("#liveContent").classList.toggle("hidden", mode === "frozen");
   $("#freezeView").classList.toggle("hidden", mode !== "frozen");
   $("#winnerView").classList.toggle("hidden", mode !== "final");
 
   if (mode === "final") renderWinner(leader, totals[leader.id]);
-  if (mode !== "live") return;
+  if (mode === "frozen") return;
 
   renderSongBattle(state.games[SONG_BATTLE.id]);
   const balloonGame = state.games[BALLOON_MONSTER.id];
